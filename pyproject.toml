@@ -1,5 +1,5 @@
 [project]
-name = "mlh-pe-hackathon"
+name = "deadletter"
 version = "0.1.0"
 requires-python = ">=3.13"
 dependencies = [
@@ -8,4 +8,11 @@ dependencies = [
     "peewee>=3.17",
     "psycopg2-binary>=2.9",
     "python-dotenv>=1.0",
+    "psutil>=6.0",
+    "rich>=13.0",
+    "typer>=0.12",
+    "apprise>=1.9",
+    "python-json-logger>=3.0",
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
 ]

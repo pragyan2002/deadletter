@@ -1,0 +1,31 @@
+{
+  "title": "deadletter",
+  "uid": "deadletter-main",
+  "schemaVersion": 38,
+  "panels": [
+    {
+      "type": "stat",
+      "title": "CPU %",
+      "gridPos": {"x": 0, "y": 0, "w": 4, "h": 4},
+      "targets": [{"expr": "deadletter_cpu_percent", "legendFormat": "CPU"}]
+    },
+    {
+      "type": "stat",
+      "title": "Memory Used MB",
+      "gridPos": {"x": 4, "y": 0, "w": 4, "h": 4},
+      "targets": [{"expr": "deadletter_memory_used_mb", "legendFormat": "RAM"}]
+    },
+    {
+      "type": "stat",
+      "title": "Active URLs",
+      "gridPos": {"x": 8, "y": 0, "w": 4, "h": 4},
+      "targets": [{"expr": "deadletter_urls_active", "legendFormat": "Active"}]
+    },
+    {
+      "type": "stat",
+      "title": "Total Events",
+      "gridPos": {"x": 12, "y": 0, "w": 4, "h": 4},
+      "targets": [{"expr": "deadletter_events_total", "legendFormat": "Events"}]
+    }
+  ]
+}
