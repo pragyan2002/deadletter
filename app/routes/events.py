@@ -8,6 +8,7 @@ from flask import Blueprint, abort, jsonify, request
 from app.models.event import Event
 from app.models.url import Url
 from app.models.user import User
+from app.validators import validate_event_type
 
 events_bp = Blueprint('events', __name__)
 
@@ -32,6 +33,9 @@ def list_events():
 
     event_type = request.args.get('event_type')
     if event_type is not None:
+        errors = validate_event_type(event_type)
+        if errors:
+            abort(400, description=errors[0])
         query = query.where(Event.event_type == event_type)
 
     query = query.order_by(Event.timestamp.desc())
@@ -71,6 +75,10 @@ def create_event():
     event_type = data.get('event_type')
     if not isinstance(event_type, str) or not event_type.strip():
         abort(400, description='event_type is required')
+    event_type = event_type.strip()
+    event_errors = validate_event_type(event_type)
+    if event_errors:
+        abort(400, description=event_errors[0])
 
     details = data.get('details', {})
     if not isinstance(details, dict):
@@ -87,7 +95,7 @@ def create_event():
     event = Event.create(
         url=url,
         user=user,
-        event_type=event_type.strip(),
+        event_type=event_type,
         details=details,
     )
 
