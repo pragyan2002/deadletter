@@ -1,14 +1,15 @@
-# Quest Reference — Production Engineering Hackathon
+# Quest Reference — deadletter / Production Engineering Hackathon
 
 ---
 
-## Critical: Before You Write a Single Line of Code
+## Critical: Before Writing Any Code
 
-1. Fork the official template: https://github.com/MLH-Fellowship/PE-Hackathon-Template-2026
-2. Log into https://www.mlh-pe-hackathon.com and download the seed files
-3. Provision your DigitalOcean Droplet and note the IP
+1. Fork template: https://github.com/MLH-Fellowship/PE-Hackathon-Template-2026
+2. Download seed files from https://www.mlh-pe-hackathon.com (MyMLH login required)
+3. Commit seeds to `seeds/` -- the schema is fixed, do not deviate
+4. Provision DigitalOcean Droplet
 
-The template is Flask + Peewee + PostgreSQL + uv. Build on top of it, do not replace it.
+Schema is: `users`, `urls`, `events`. No job queue. URL shortener with event audit log.
 
 ---
 
@@ -16,70 +17,75 @@ The template is Flask + Peewee + PostgreSQL + uv. Build on top of it, do not rep
 
 ### Bronze
 - [ ] pytest test suite, unit tests in isolation
-- [ ] GitHub Actions CI running on every commit
-- [ ] GET /health returns 200 OK
+- [ ] GitHub Actions CI on every commit
+- [ ] GET /health returns 200
 
-Verification: CI logs showing green + working /health (ideally against live DO URL).
+Verification: CI logs green + /health on live DO URL.
 
 ### Silver
-- [ ] 50%+ coverage via pytest-cov
-- [ ] Integration tests hitting the API and checking DB state
-- [ ] CI blocks deploys on test failure (the deploy-to-DigitalOcean job only runs on green)
+- [ ] 50%+ coverage (pytest-cov)
+- [ ] Integration tests hitting API and checking DB
+- [ ] CI blocks deploy to DigitalOcean on test failure
 - [ ] Documented 404 and 500 handling
 
-Verification: coverage report screenshot + screenshot of blocked deploy in GitHub Actions.
+Verification: coverage screenshot + blocked deploy screenshot in GitHub Actions.
 
 ### Gold
 - [ ] 70%+ coverage
-- [ ] Bad inputs return clean JSON errors, app never crashes
-- [ ] Docker restart policy -- kill container on Droplet, it restarts automatically
-- [ ] Failure Mode documentation committed
+- [ ] Bad inputs return JSON errors, never crashes, never HTML error pages
+- [ ] Docker restart: always -- kill container on Droplet, it recovers
+- [ ] docs/failure-modes.md committed
 
-Verification: live demo kill+resurrect on DigitalOcean + garbage input returning JSON error.
+Verification: kill+recover demo on DO + inactive URL returning 404 + failure modes link.
 
 ### Hidden Score (up to +50 bonus)
-- Unknown task_type -> 400 JSON (not HTML, not 500)
-- Duplicate idempotency_key -> 409 JSON
-- Missing job ID -> 404 JSON (not Flask HTML 404)
-- Cancel non-PENDING job -> 409
-- All errors share the same shape: {"error": str, "detail": str}
+- Inactive URL GET /r/<code> -> 404 JSON (must NOT redirect)
+- Missing short_code -> 404 JSON (not Flask HTML)
+- Duplicate short_code -> 409 JSON
+- Invalid URL format -> 400 JSON
+- PUT on inactive URL -> 404 JSON
+- DELETE on already-inactive -> 409 JSON
+- All mutations create Events atomically (db.atomic())
+- All errors: {"error": str, "detail": str}
 
 ---
 
 ## Incident Response -- TARGET: SILVER (GOLD IF TIME ALLOWS)
 
 ### Bronze
-- [ ] Structured JSON logs with timestamps and log levels
-- [ ] /metrics endpoint showing CPU/RAM + job counts
-- [ ] Logs viewable without SSH (docker logs accessible via CI or log drain)
+- [ ] Structured JSON logs (timestamp, level, component, message)
+- [ ] GET /metrics: CPU, RAM, active/inactive URL counts, event counts
+- [ ] Logs viewable without SSH (docker logs)
 
 ### Silver
-- [ ] Alerts for Service Down and High Error Rate via Apprise -> Discord
-- [ ] Alert fires within 5 minutes
+- [ ] Discord alert on Service Down + High Error Rate (Apprise)
+- [ ] Fires within 5 minutes
 - [ ] Alert config code committed
 
-### Gold (STRETCH -- pre-built, activate with one command)
-- [ ] Grafana dashboard with 4 panels: Latency, Traffic, Errors, Saturation
-- [ ] Runbook (docs/runbook.md -- already written for Silver)
-- [ ] Sherlock Mode: diagnose fake issue using dashboard
+### Gold (STRETCH -- pre-built in Session 5, one command to activate)
+- [ ] Grafana dashboard: Latency, Traffic, Errors, Saturation (4 panels)
+- [ ] docs/runbook.md (already written for Silver)
+- [ ] Sherlock Mode diagnosis demo
+
+Activation: `PROMETHEUS_ENABLED=true docker compose -f docker-compose.yml -f docker-compose.observability.yml up -d`
 
 ---
 
 ## Documentation -- TARGET: GOLD
 
 ### Bronze
-- [ ] README with one-command setup + live DO URL
+- [ ] README: one-command setup + live DO URL
 - [ ] Architecture diagram
-- [ ] API docs
+- [ ] API docs (all endpoints)
 
 ### Silver
-- [ ] Deploy guide (DigitalOcean Droplet steps + rollback)
+- [ ] docs/deploy.md: Droplet steps + rollback
 - [ ] Troubleshooting guide
-- [ ] .env.example with all vars
+- [ ] .env.example with all vars documented
 
 ### Gold
 - [ ] docs/runbook.md (Service Down + High Error Rate)
-- [ ] docs/decisions.md (why template, why ARQ, why DO, etc.)
+- [ ] docs/decisions.md (why template, why event log atomicity, why DO, etc.)
 - [ ] docs/capacity.md
 
 ---
@@ -88,12 +94,11 @@ Verification: live demo kill+resurrect on DigitalOcean + garbage input returning
 
 - [ ] Demo video 2 minutes or less
 - [ ] Starts with "Production Engineering Hackathon"
-- [ ] Public GitHub repo (forked from template)
-- [ ] Repo and video stay public post-event
-- [ ] Devpost registration complete
-- [ ] MLH event page check-in complete
-- [ ] Email matches on both platforms
+- [ ] Public GitHub repo named `deadletter` forked from template
+- [ ] Repo and video public post-event
+- [ ] Devpost registration + MLH check-in (emails must match)
 - [ ] Video recorded during hackathon weekend
-- [ ] Seed files used (schema matches what platform provides)
-- [ ] Live DigitalOcean URL working at submission time
-- [ ] At least one teammate (solo projects not prize-eligible)
+- [ ] Seed files used -- schema matches platform exactly
+- [ ] Live DO URL working at submission time
+- [ ] At least one teammate (solo not prize-eligible)
+- [ ] 18+ for fellowship eligibility

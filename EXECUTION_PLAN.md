@@ -1,404 +1,456 @@
-# Execution Plan — Production Engineering Hackathon
-## Project: Job Queue / Task Runner API (Flask + Peewee + DigitalOcean)
+# Execution Plan — deadletter / Production Engineering Hackathon
+## URL Shortener + Event Audit Log (Flask + Peewee + DigitalOcean)
 
 Each session maps to one `/clear` block in Claude Code. Run `/clear` at the start of each.
-Use plan mode (Shift+Tab) before any complex implementation. Default model: Sonnet.
+Use plan mode (Shift+Tab) before complex implementation. Default model: Sonnet.
+
+The project is simpler than the original job queue plan (no ARQ, no Redis, no worker process).
+Two Docker services instead of four. This buys time for polish, better tests, and the CLI.
 
 ---
 
-## Before the Hackathon Starts (Do These Now)
+## Master Checklist
 
-1. **Fork the official template**: https://github.com/MLH-Fellowship/PE-Hackathon-Template-2026
-   Fork it to your GitHub account. Do not clone a fresh repo -- the template is the required
-   starting point.
+### Before the Hackathon
+- [x] Fork and rename repo to `deadletter`
+- [x] Download seed files, commit to `seeds/`
+- [x] Install uv locally
+- [x] Claude Code setup
 
-2. **Get the seed files**: Log into https://www.mlh-pe-hackathon.com with MyMLH and download
-   the seed files from the platform. These define the database schema and give you test data.
-   Save them to `seeds/` in your repo before writing a single line of code.
+### Session 1: Template Onboarding
+- [x] Template runs locally
+- [x] Schema confirmed against seed files
+- [x] Architecture plan reviewed
 
-3. **Provision DigitalOcean Droplet**: Create a Droplet now (don't wait until hour 4).
-   - Ubuntu 24.04, Basic, 2GB RAM / 1 vCPU
-   - Enable SSH key auth
-   - Install Docker + Docker Compose on it: `curl -fsSL https://get.docker.com | sh`
-   - Note the IP address
+### Session 2: Models + Routes + Error Handlers
+- [x] `app/models/user.py`, `url.py`, `event.py` (exact schema)
+- [x] `app/validators.py` (URL format, event_type, short_code)
+- [x] `app/errors.py` (JSON errorhandlers for 400, 404, 500)
+- [x] `app/routes/urls.py` (all URL endpoints, `db.atomic()`, redirect logic)
+- [x] `app/routes/users.py`
+- [x] `app/routes/events.py`
+- [x] `app/routes/health.py`
+- [x] `app/routes/metrics.py`
+- [x] `migrate.py`
 
-4. **Set GitHub Secrets**: In your forked repo settings, add:
-   - `DO_HOST`: your Droplet IP
-   - `DO_SSH_KEY`: your private SSH key content
+### Session 3: Docker + CI/CD
+- [x] `Dockerfile`
+- [x] `docker-compose.yml` (postgres + api, `restart: always`)
+- [x] `docker-compose.observability.yml`
+- [x] `.github/workflows/ci.yml` (test job + deploy-on-green job)
+- [ ] CI `test` job has postgres service defined
+- [ ] CI runs `--cov-fail-under=50`
+- [ ] DigitalOcean Droplet provisioned and live (`/health` returns 200)
+- [ ] `DO_HOST` and `DO_SSH_KEY` GitHub secrets set
+- [ ] First manual deploy completed
+- [ ] Screenshot: green CI run
+- [ ] Screenshot: blocked CI run (broken test)
 
-5. **Install uv locally**: `curl -LsSf https://astral.sh/uv/install.sh | sh`
+### Session 4: Tests
+- [x] `tests/conftest.py` (SQLite in-memory fixture)
+- [x] `tests/unit/test_validators.py`
+- [x] `tests/integration/test_urls.py` (all reliability scenarios)
+- [ ] All tests passing (`pytest` green)
+- [ ] Coverage >= 70% (`--cov-fail-under=70`)
 
-6. **One-time Claude Code setup**:
-   ```bash
-   unset ANTHROPIC_API_KEY
-   export DISABLE_NON_ESSENTIAL_MODEL_CALLS=1
-   ```
+### Session 5: Observability
+- [x] `docker-compose.observability.yml`
+- [x] `observability/prometheus/prometheus.yml`
+- [x] `observability/grafana/provisioning/` (datasource + dashboard provisioning)
+- [ ] `app/logging_config.py` (JSON structured logging with python-json-logger)
+- [ ] Request logging middleware in `app/__init__.py` (method, path, status_code, duration_ms)
+- [ ] `app/alerts.py` (Apprise -> Discord webhook)
+- [ ] `POST /admin/test-alert` endpoint
+- [ ] 500 errorhandler fires Discord alert
+- [ ] Optional Prometheus support via `PROMETHEUS_ENABLED=true`
+- [ ] Grafana dashboard built (4 panels) and exported to `observability/grafana/dashboards/deadletter.json`
+- [ ] Discord alert tested (stop postgres, wait, confirm notification)
+
+### Session 6: Rich CLI
+- [x] `cli.py` (Typer + Rich)
+- [ ] All commands verified working: `shorten`, `redirect`, `inspect`, `list`, `delete`, `events`, `dashboard`, `health`, `metrics`
+- [ ] `inspect <code>` shows URL panel + colored event history table
+- [ ] `dashboard` runs for 2+ minutes with live refresh
+
+### Session 7: Documentation
+- [x] `docs/failure-modes.md`
+- [x] `docs/runbook.md`
+- [x] `docs/decisions.md`
+- [x] `docs/deploy.md`
+- [x] `docs/api.md`
+- [x] `docs/capacity.md`
+- [x] `README.md`
+
+### Session 8: Demo Video
+- [ ] Practice run completed
+- [ ] Chaos demo: container kill + recovery visible on dashboard
+- [ ] Delete + redirect-returns-404 demo recorded
+- [ ] GitHub Actions green/blocked screenshots in video
+- [ ] Discord notification shown
+- [ ] Video uploaded to submission
+
+### Stretch: Grafana Incident Response (Gold)
+- [ ] Prometheus + Grafana overlay running with traffic
+- [ ] 4-panel dashboard screenshot captured
+- [ ] "Sherlock Mode" incident demo (stop postgres, observe error spike, find root cause in logs)
 
 ---
 
-## Session 1: Template Onboarding + Architecture
-**Goal:** Understand the template, plan the job queue additions, run the template locally.
+## Remaining Work (Priority Order)
 
-**Claude Code approach:**
-Start with Opus for this session only:
+1. **DigitalOcean deployment** -- Droplet provisioned, secrets set, app live
+2. **Observability gap** -- `logging_config.py`, `alerts.py`, Discord alert, request middleware
+3. **CI fixes** -- add postgres service, add `--cov-fail-under=50`
+4. **Tests** -- verify all pass, confirm 70%+ coverage
+5. **CLI verification** -- run each command end-to-end against live server
+6. **Grafana dashboard** -- build 4 panels, export JSON
+7. **Demo video** -- record and upload
+
+---
+
+## Before the Hackathon Starts
+
+1. Fork: https://github.com/MLH-Fellowship/PE-Hackathon-Template-2026
+2. Rename repo to `deadletter`
+3. Log into https://www.mlh-pe-hackathon.com, download seed files, commit to `seeds/`
+4. Provision DigitalOcean Droplet (Ubuntu 24.04, 2GB RAM), install Docker
+5. Add GitHub secrets: `DO_HOST`, `DO_SSH_KEY`
+6. Install uv locally: `curl -LsSf https://astral.sh/uv/install.sh | sh`
+7. Claude Code setup: `unset ANTHROPIC_API_KEY && export DISABLE_NON_ESSENTIAL_MODEL_CALLS=1`
+
+---
+
+## Session 1: Template Onboarding + Architecture (45 min)
+**Goal:** Template runs locally, schema confirmed, plan reviewed.
+
+Use Opus for this session only. Switch to Sonnet after.
+
 ```
-"I am building a job queue API for the MLH PE Hackathon on top of this Flask + Peewee
-template. Here is the template structure: [paste README from template]. Here is my plan:
-[paste relevant sections of CLAUDE.md]. Review the plan and tell me: (1) what parts of
-the template I keep unchanged, (2) what I add, (3) any conflicts between Peewee and my
-data model. Do not write any code yet."
+"I am building a URL shortener with event audit log for the MLH PE Hackathon on top of
+this Flask + Peewee template. The schema is fixed by seed files. Here are the three
+models: [paste models from CLAUDE.md]. Here is the endpoint plan: [paste API table].
+
+Review and confirm: (1) anything in the template that conflicts with these models,
+(2) whether BinaryJSONField from playhouse.postgres_ext works with the template's DB
+setup, (3) any Peewee gotchas with the column_name FK pattern. Do not write code yet."
 ```
 
-After review, switch to Sonnet: `/model sonnet`
-
-Then:
-```
-"Look at the seed files in seeds/. Based on these, propose the Peewee Job model fields
-that match the schema. Keep the template's database.py and BaseModel unchanged."
-```
-
-Run the template locally to confirm it works before touching anything:
+Then run the template to confirm it works:
 ```bash
 uv sync
 cp .env.example .env
-createdb hackathon_db   # or use Docker postgres
+docker compose up -d postgres
+uv run migrate.py   # will write this in Session 2
 uv run run.py
 curl http://localhost:5000/health
 ```
 
-**Done when:** Template runs, /health returns 200, seed files reviewed, architecture confirmed.
+Switch to Sonnet: `/model sonnet`
 
 **Run `/clear` before Session 2.**
 
 ---
 
-## Session 2: Flask Routes + Peewee Models + Validators
-**Goal:** All 7 endpoints implemented with proper validation and error handling.
+## Session 2: Models + Routes + Error Handlers (1.5 hours)
+**Goal:** All endpoints working, correct error shapes everywhere.
 
-**Claude Code prompt (use plan mode first, Shift+Tab):**
+Use plan mode (Shift+Tab) first:
 ```
-"Add a job queue to the Flask template. I need:
-
-1. app/models/job.py: Peewee Job model with these fields: [paste field list from CLAUDE.md].
-   idempotency_key must have unique=True at the field level.
-
-2. app/validators.py: validate_job_create(data) function that checks task_type against
-   this allowlist: [list]. Returns {"error": str, "detail": str} or None.
-
-3. app/errors.py: JSON error handlers for 400, 404, 500 using @app.errorhandler.
-   All must return {"error": str, "detail": str}.
-
-4. app/routes/jobs.py: Blueprint with all 7 endpoints. For duplicate idempotency_key,
-   catch peewee.IntegrityError and return 409. For missing job, return 404 JSON.
-
-5. app/routes/health.py: GET /health -> {"status": "ok"}
-
-6. app/routes/metrics.py: GET /metrics -> psutil CPU/RAM + job counts from DB.
-
-7. migrate.py: db.create_tables([Job], safe=True) script.
-
-Wire everything in app/__init__.py and app/routes/__init__.py. Then run:
-  uv run migrate.py
-  uv run run.py
-  curl -X POST localhost:5000/jobs -H 'Content-Type: application/json' \
-    -d '{\"task_type\": \"send_email\", \"payload\": {\"to\": \"test@example.com\"}}'
-Confirm it returns 201 with a job ID."
+"Plan the implementation of a Flask URL shortener with these endpoints: [paste API table
+from CLAUDE.md]. The models are fixed: [paste models]. Plan the file structure within
+app/ before writing any code."
 ```
 
-**Done when:** All endpoints return correct responses. Duplicate idempotency_key returns 409.
-Unknown task_type returns 400 JSON (not HTML). Missing job returns 404 JSON.
+After approving plan, implement in this order:
+
+**Prompt 1 -- Models and validators:**
+```
+"Create app/models/user.py, app/models/url.py, app/models/event.py using the exact
+Peewee model definitions in CLAUDE.md. Create app/validators.py with:
+- validate_url(url): must start with http:// or https://, return error dict or None
+- validate_event_type(t): must be 'created'/'updated'/'deleted'
+- validate_short_code(code): must be 6 chars alphanumeric
+Create app/errors.py with @app.errorhandler for 400, 404, 500 -- all return
+{"error": str, "detail": str} JSON, never HTML."
+```
+
+**Prompt 2 -- Core routes:**
+```
+"Create app/routes/urls.py with all URL endpoints. Critical requirements:
+- POST /urls: generate short_code, insert Url + Event(event_type='created') in db.atomic()
+- PUT /urls/<code>: update url + insert Event(event_type='updated') in db.atomic(),
+  set updated_at=datetime.utcnow() manually, return 404 if inactive
+- DELETE /urls/<code>: set is_active=False + insert Event(event_type='deleted') in
+  db.atomic(), return 409 if already inactive
+- GET /r/<code>: 302 redirect if active, 404 JSON if inactive or missing (never redirect
+  an inactive URL -- this is the most important behavior)
+- Duplicate short_code: catch peewee.IntegrityError, return 409 JSON"
+```
+
+**Prompt 3 -- Remaining routes:**
+```
+"Create app/routes/users.py (POST /users, GET /users/<id>),
+app/routes/events.py (GET /events with url_id and event_type filters),
+app/routes/health.py (GET /health -> {"status": "ok"}),
+app/routes/metrics.py (GET /metrics -> psutil CPU/RAM + URL counts from DB).
+Wire all blueprints in app/routes/__init__.py.
+Create migrate.py that runs db.create_tables([User, Url, Event], safe=True)
+and loads seed data from seeds/ if tables are empty."
+```
+
+Test manually:
+```bash
+docker compose up -d
+uv run migrate.py
+# Create a user, shorten a URL, redirect, delete, confirm 404 on redirect
+curl -X POST localhost:5000/urls -d '{"user_id":1,"original_url":"https://example.com","title":"test"}'
+# Note the short_code, then:
+curl -L localhost:5000/r/<short_code>   # should redirect
+curl -X DELETE localhost:5000/urls/<short_code> -d '{"reason":"user_requested"}'
+curl localhost:5000/r/<short_code>      # should return 404 JSON, not redirect
+```
+
+**Done when:** All endpoints work. Inactive URL returns 404, not redirect. Events are created.
 
 **Run `/clear` before Session 3.**
 
 ---
 
-## Session 3: ARQ Worker + Tasks + Stuck Job Monitor
-**Goal:** Jobs process end-to-end, chaos recovery works.
+## Session 3: Docker + DigitalOcean Deploy + CI (1 hour)
+**Goal:** App live on DigitalOcean, CI deploys only on green tests.
 
-**Claude Code prompt:**
+**Prompt 1 -- Dockerfile:**
 ```
-"Add an ARQ-based worker to this Flask + Peewee project. The worker connects to
-REDIS_URL from env and processes jobs stored in PostgreSQL. Create:
-
-1. worker/tasks.py: async functions for send_email, resize_image, process_csv,
-   generate_report, send_webhook. Each does asyncio.sleep(random.uniform(2, 8)) to
-   simulate work and has 20% random failure rate. Each marks the job PROCESSING on
-   start (update DB), COMPLETED on success, FAILED on error (increment retry_count,
-   requeue if under max_retries).
-
-2. worker/worker.py: ARQ WorkerSettings connecting to REDIS_URL. on_startup handler
-   requeues any PROCESSING jobs left from a previous crash.
-
-3. worker/monitor.py: ARQ cron function running every STUCK_JOB_TIMEOUT_MINUTES that
-   finds PROCESSING jobs older than the threshold and requeues them.
-
-Add Dockerfile.worker and the worker service to docker-compose.yml with restart: always."
+"Write a Dockerfile for this Flask + Peewee app using the uv base image:
+FROM ghcr.io/astral-sh/uv:python3.12-bookworm
+Install with RUN uv sync --frozen. Entry point: uv run run.py.
+Write docker-compose.yml with postgres:17 and api services, both restart: always.
+Add a healthcheck to the api service that hits /health."
 ```
 
-After writing, test end-to-end:
+**Prompt 2 -- CI/CD:**
+```
+"Write .github/workflows/ci.yml with two jobs:
+1. 'test': triggers on push and PR. Services: postgres:17. Runs uv sync then
+   uv run pytest --cov=app --cov-fail-under=50. Fails if pytest fails.
+2. 'deploy': runs only after 'test' passes, only on push to main. Uses
+   appleboy/ssh-action@v1 with DO_HOST and DO_SSH_KEY secrets to SSH in and run:
+   cd /app && git pull && docker compose up -d --build
+This is the Silver 'Gatekeeper' requirement: failed tests block production deploys."
+```
+
+Deploy manually the first time:
 ```bash
+ssh root@<droplet-ip>
+git clone https://github.com/pragyan2002/deadletter /app
+cd /app && cp .env.example .env   # fill in DATABASE_URL etc.
 docker compose up -d
-curl -X POST localhost:5000/jobs ... # submit a job
-# watch it go PENDING -> PROCESSING -> COMPLETED
-docker kill <worker_container>       # chaos test
-# wait for monitor, verify requeue
+curl http://<droplet-ip>:5000/health
 ```
 
-**Done when:** Full lifecycle works. Kill/recover cycle confirmed.
+**Done when:** Live URL returns 200. Break a test, confirm CI blocks deploy. Fix it, confirm
+auto-deploy runs. Screenshot both states for submission.
 
 **Run `/clear` before Session 4.**
 
 ---
 
-## Session 4: Docker Compose + DigitalOcean Deploy
-**Goal:** App running live on DigitalOcean, CI deploys on green tests.
+## Session 4: Tests (1.5 hours)
+**Goal:** 70%+ coverage, all reliability scenarios verified.
 
-**Claude Code prompt (two parts):**
-
-Part 1 -- Docker Compose:
+**Prompt 1 -- conftest and unit tests:**
 ```
-"Review docker-compose.yml and confirm all four services (postgres, redis, api, worker)
-have restart: always. The api Dockerfile should use the uv base image:
-FROM ghcr.io/astral-sh/uv:python3.12-bookworm
-and install with RUN uv sync --frozen. Add a healthcheck to the api service."
-```
-
-Part 2 -- CI/CD with DigitalOcean deploy gate:
-```
-"Write .github/workflows/ci.yml with two jobs:
-1. 'test': runs on push/PR, spins up postgres:17 and redis:7 services, runs
-   uv run pytest --cov=app --cov-fail-under=50. Job fails if pytest fails.
-2. 'deploy': runs only after 'test' passes, only on pushes to main. Uses
-   appleboy/ssh-action to SSH into DO_HOST with DO_SSH_KEY secret and runs:
-   cd /app && git pull && docker compose up -d --build
-This means: failed tests block deploys. Green tests deploy automatically."
+"Write tests/conftest.py: Flask test client fixture using app.test_client(), test
+database using SQLite (override DATABASE_URL in test config), tables created and
+torn down per test. Write tests/unit/test_validators.py:
+- valid URL accepted
+- URL without http:// rejected
+- valid event_type accepted
+- unknown event_type rejected
+- short_code exactly 6 chars accepted, 5 chars rejected
+Run pytest tests/unit/ and confirm pass."
 ```
 
-Then deploy manually the first time:
-```bash
-ssh root@<droplet-ip>
-git clone <your-repo> /app
-cp /app/.env.example /app/.env  # fill in real values
-cd /app && docker compose up -d
-curl http://<droplet-ip>:5000/health  # confirm live
+**Prompt 2 -- integration tests:**
+```
+"Write tests/integration/test_urls.py covering:
+- POST /urls valid -> 201, short_code in response, event created
+- POST /urls duplicate short_code -> 409 JSON (mock or force collision)
+- POST /urls invalid URL format -> 400 JSON
+- GET /r/<code> active -> 302
+- GET /r/<code> inactive -> 404 JSON (not redirect)
+- GET /r/<code> missing -> 404 JSON
+- PUT /urls/<code> active -> 200, updated event created, updated_at changed
+- PUT /urls/<code> inactive -> 404 JSON
+- DELETE /urls/<code> active -> 200, deleted event created, is_active=False
+- DELETE /urls/<code> already inactive -> 409 JSON
+- GET /urls/<code> -> event history included
+- GET /health -> 200
+- GET /metrics -> has cpu_percent, memory_used_mb, url counts (active/inactive/total), event counts
+
+For each test include a comment explaining which reliability property it verifies.
+Run pytest tests/integration/ and fix all failures before continuing."
 ```
 
-**Done when:** `curl http://<droplet-ip>:5000/health` returns 200. Push a broken commit,
-confirm CI blocks. Push a fix, confirm it auto-deploys.
+**Prompt 3 -- coverage gap:**
+```
+"Run pytest --cov=app --cov-report=term-missing. If below 70%, show me which lines
+in app/routes/urls.py are uncovered and write tests to cover them."
+```
+
+**Done when:** pytest passes, 70%+ coverage. Screenshot for submission.
 
 **Run `/clear` before Session 5.**
 
 ---
 
-## Session 5: pytest Unit + Integration Tests
-**Goal:** 70%+ coverage, all reliability scenarios tested.
+## Session 5: Observability (1.5 hours)
+**Goal:** JSON logs, /metrics live, Discord alert fires, Grafana overlay committed.
 
-**Claude Code prompt (two passes):**
-
-Pass 1:
+**Prompt 1 -- Logging and alerts:**
 ```
-"Write tests/conftest.py with a Flask test client fixture using app.test_client().
-Use a separate SQLite test database by overriding DATABASE_URL in the test config.
-Then write tests/unit/test_validators.py testing: valid task types accepted,
-unknown task_type returns error dict, missing required fields caught, idempotency_key
-is optional. Run pytest tests/unit/ and confirm all pass."
-```
-
-Pass 2:
-```
-"Write tests/integration/test_jobs.py with these cases:
-- POST valid job -> 201, job ID in response
-- POST duplicate idempotency_key -> 409, error='duplicate_idempotency_key'
-- POST unknown task_type -> 400, error field present
-- GET existing job -> 200
-- GET non-existent job -> 404, error field present
-- POST cancel PENDING job -> 200
-- POST cancel non-PENDING job -> 409
-- GET /stats -> has pending/processing/completed/failed keys
-- GET /health -> 200, status='ok'
-- GET /metrics -> has cpu_percent, memory_used_mb, jobs_pending keys
-Run pytest tests/integration/ and fix any failures before continuing."
+"Add structured JSON logging to app/logging_config.py using python-json-logger.
+Each entry: timestamp, level, component, message. Add Flask before/after request
+middleware logging method, path, status_code, duration_ms. Write app/alerts.py
+using Apprise: send_alert(title, body) posts to DISCORD_WEBHOOK_URL. Add
+POST /admin/test-alert endpoint. Add an alert on 500 errors (hook into the 500
+errorhandler in errors.py)."
 ```
 
-Pass 3 (if coverage is under 70%):
+**Prompt 2 -- Prometheus overlay:**
 ```
-"Run pytest --cov=app --cov-report=term-missing. Show me which lines in app/routes/jobs.py
-and app/validators.py are not covered. Write tests to cover them."
+"Add optional Prometheus support. When PROMETHEUS_ENABLED=true, use
+prometheus-flask-exporter. Add with: uv add prometheus-flask-exporter.
+Create observability/prometheus/prometheus.yml scraping api:5000/metrics every 15s.
+Create observability/grafana/provisioning/ files for datasource and dashboard
+auto-load. Create docker-compose.observability.yml adding prometheus and grafana.
+Leave the dashboard JSON empty for now."
 ```
 
-**Done when:** pytest passes, coverage report shows 70%+. Screenshot for submission.
+Build Grafana dashboard in the UI after spinning up the overlay:
+```bash
+PROMETHEUS_ENABLED=true docker compose -f docker-compose.yml \
+  -f docker-compose.observability.yml up -d
+# generate some traffic: run CLI commands, curl redirects
+# open localhost:3000, build 4 panels:
+#   1. Request latency p50/p95
+#   2. Requests/sec
+#   3. Error rate (4xx+5xx)
+#   4. Active URLs count (from /metrics JSON or custom gauge)
+# export dashboard JSON -> observability/grafana/dashboards/deadletter.json
+```
+
+Test Discord alert: `docker compose stop postgres`, wait 5 minutes, confirm notification.
+
+**Done when:** Logs are JSON, /metrics returns data, Discord fires, Grafana overlay works.
 
 **Run `/clear` before Session 6.**
 
 ---
 
-## Session 6: CI Coverage Gate + Blocked Deploy Screenshot
-**Goal:** CI enforces coverage minimum, screenshot the blocked deploy for submission.
+## Session 6: Rich CLI (1 hour)
+**Goal:** All CLI commands working. `inspect` and `dashboard` look great on camera.
 
-- Update ci.yml test job: `--cov-fail-under=70` (was 50 in Session 4)
-- Push a deliberate test failure to a branch, screenshot the blocked CI run
-- Merge the fix, confirm green
-- Screenshot the green run too
+Use plan mode (Shift+Tab) first:
+```
+"Plan cli.py using Rich + Typer against a Flask API at API_URL env var
+(default http://localhost:5000). Commands: shorten, redirect, inspect, list, delete,
+events, dashboard, health, metrics.
 
-**This session is short (30-45 min).** Use remaining time to review the hidden reliability
-score checklist in CLAUDE.md and add any missing edge case tests.
+Key views:
+- inspect <code>: URL panel showing all fields (status colored green/red), then event
+  history table with event_type colored (created=green, updated=yellow, deleted=red),
+  details JSONB syntax-highlighted
+- dashboard: rich.Live layout, refreshes every 2s:
+    top-left: stats panel (total URLs, active, inactive, total events)
+    top-right: table of 10 most recently created/updated URLs with status badge
+    bottom: last 5 events as a scrolling log
+- list: table with short_code, title, original_url (truncated), status badge, created_at
+
+Show the plan before writing code."
+```
+
+Implement in two passes:
+1. Simple: health, metrics, shorten, redirect, list, delete, events
+2. Live: inspect (static but rich), dashboard (rich.Live)
+
+**Done when:** `inspect HOE5E` shows URL + event history. Dashboard runs for 2 minutes.
 
 **Run `/clear` before Session 7.**
 
 ---
 
-## Session 7: Observability (Incident Response Bronze/Silver + Gold Prep)
-**Goal:** JSON logs everywhere, /metrics live, Discord alert fires, Grafana overlay ready.
+## Session 7: Documentation (45 min)
+**Goal:** All docs committed.
 
-**Claude Code prompt (two halves -- /compact between them):**
+One prompt per file:
 
-Half 1:
 ```
-"Add structured JSON logging to the Flask project using python-json-logger. Configure
-in app/logging_config.py. Each log entry must have: timestamp, level, component,
-message. Add a @app.before_request and @app.after_request middleware that logs method,
-path, status_code, and duration_ms. Add logging to worker/tasks.py: INFO on pickup,
-WARN on retry, ERROR on final failure. Write app/alerts.py using Apprise to send
-a Discord notification to DISCORD_WEBHOOK_URL. Add POST /admin/test-alert endpoint.
-Add an alert call in worker/monitor.py when stale jobs are found."
+"Write docs/failure-modes.md. Cover exactly these scenarios with the precise behavior
+for each: inactive URL redirect attempt, duplicate short_code, invalid URL format on
+create, PUT on inactive URL, DELETE on already-inactive URL, DB connection lost during
+atomic transaction, container crash mid-redirect. SRE style -- specific enough that an
+on-call engineer knows exactly what to expect."
 ```
 
-Half 2 (after /compact):
 ```
-"Add optional Prometheus support. When PROMETHEUS_ENABLED=true, use
-prometheus-flask-exporter to instrument the app. Add it to pyproject.toml with
-uv add prometheus-flask-exporter. Create these observability files:
-- observability/prometheus/prometheus.yml: scrape api:5000/metrics every 15s
-- observability/grafana/provisioning/datasources/prometheus.yml
-- observability/grafana/provisioning/dashboards/dashboard.yml
-- docker-compose.observability.yml: adds prometheus + grafana services
-Leave the Grafana dashboard JSON for manual creation in the UI."
+"Write docs/runbook.md with two runbooks: 'Service Down' and 'High Error Rate'.
+Step-by-step for a 3am engineer. Each includes: what the alert means, step 1 (check
+docker ps on Droplet), step 2 (check docker logs), step 3 (check DB connection),
+recovery steps, rollback procedure (git revert + docker compose up --build)."
 ```
 
-Test Discord alert:
-```bash
-docker compose stop postgres
-# wait 5 minutes, confirm Discord gets a notification
-docker compose start postgres
+```
+"Write docs/decisions.md: why Flask + Peewee (required template), why no job queue
+(seed schema defines URL shortener, not queue), why event log atomicity with db.atomic(),
+why soft deletes on URLs, why DigitalOcean Droplet over App Platform, why Rich CLI
+over web UI."
 ```
 
-Build Grafana dashboard in UI, export JSON, save to
-`observability/grafana/dashboards/job-queue.json`:
-- Panel 1: Request latency (p50/p95)
-- Panel 2: Requests/sec by endpoint
-- Panel 3: Error rate (4xx+5xx)
-- Panel 4: Queue depth (jobs_pending + jobs_processing)
+```
+"Write README.md: one-command setup (docker compose up), what deadletter does, ASCII
+architecture diagram (browser -> Flask -> Postgres, CLI -> Flask), quick start showing
+3 CLI commands, link to live DigitalOcean URL."
+```
 
-**Done when:** Discord fires on DB kill. Grafana loads with 4 panels when overlay is active.
-
-**Run `/clear` before Session 8.**
+Write manually (faster):
+- `docs/deploy.md`: Droplet setup steps + rollback
+- `docs/api.md`: endpoint list with curl examples
+- `docs/capacity.md`: single Droplet estimate from /metrics
 
 ---
 
-## Session 8: Rich CLI
-**Goal:** All 8 CLI commands working. Dashboard looks great on camera.
-
-**Claude Code -- use plan mode (Shift+Tab) first:**
-```
-"Plan cli.py using Rich and Typer that talks to a Flask API running at API_URL env var
-(default http://localhost:5000). Commands: submit, watch, dashboard, list, inspect,
-cancel, health, metrics. Dashboard uses rich.Live with 3-region Layout: queue stats
-panel top-left, recent jobs table top-right, log tail bottom. Status colors: PENDING
-yellow, PROCESSING cyan, COMPLETED green, FAILED red bold, CANCELLED dim. Show plan
-before writing code."
-```
-
-After plan approval, implement in two passes:
-1. Simple commands: health, metrics, submit, list, inspect, cancel
-2. Live commands: watch (spinner + poll), dashboard (rich.Live layout)
-
-Run the dashboard for 2 minutes with 5-10 jobs cycling through to confirm it looks good.
-
-**Done when:** All 8 commands work. Dashboard is visually polished.
-
-**Run `/clear` before Session 9.**
-
----
-
-## Session 9: Documentation
-**Goal:** All docs committed. README is clean enough to be the submission page.
-
-One prompt per doc (keeps each turn cheap):
-
-```
-"Write docs/failure-modes.md documenting these scenarios with exact behavior:
-[paste hidden reliability checklist from CLAUDE.md]. SRE style -- specific, not vague."
-```
-
-```
-"Write docs/runbook.md with two runbooks: Service Down and High Error Rate. Each is
-step-by-step for a 3am engineer. Include: what the alert means, step 1, step 2, how
-to confirm fix, how to rollback."
-```
-
-```
-"Write docs/decisions.md: why Flask + Peewee template (required by hackathon), why ARQ
-over Celery, why idempotency keys, why stuck job monitor, why Apprise, why Rich CLI,
-why DigitalOcean Droplet over App Platform."
-```
-
-```
-"Write README.md: one-command setup (docker compose up), what the app does, ASCII
-architecture diagram of the 4 services + DigitalOcean deployment, quick start showing
-3 CLI commands, link to live URL on DigitalOcean."
-```
-
-Write manually (faster than prompting):
-- `docs/deploy.md`: Droplet setup steps + rollback (git revert + docker compose up)
-- `docs/api.md`: endpoint list with examples (copy from Swagger or curl output)
-- `docs/capacity.md`: rough estimate from /metrics during load
-
----
-
-## Session 10: Demo Video
+## Session 8: Demo Video (30 min)
 **Goal:** 2-minute video recorded and uploaded.
 
-**Demo sequence (practice this once before recording):**
+**Practice this sequence once before recording:**
 
 1. "Hey, I'm [name] and this is my demo for the Production Engineering Hackathon."
-2. Show the live DigitalOcean URL in browser: `http://<droplet-ip>:5000/health` returns 200
-3. `python cli.py dashboard` -- live dashboard running against DO server
-4. `python cli.py submit --type process_csv --payload '{...}'` -- job appears on dashboard
-5. `docker kill <worker_container_on_droplet>` via SSH -- job stuck in PROCESSING on dashboard
-6. Worker restarts (restart: always), monitor fires, job completes -- recovery on dashboard
-7. `python cli.py submit --type invalid_type` -- clean JSON error
-8. Show GitHub Actions: green run, then the screenshot of the blocked deploy
-9. Show Discord notification screenshot
+2. Show live URL: `curl http://<droplet-ip>:5000/health` returns 200
+3. `python cli.py dashboard` -- running against live DO server
+4. `python cli.py shorten --url https://anthropic.com --title "Anthropic"` -- appears on dashboard
+5. `python cli.py inspect <short_code>` -- URL panel + event history
+6. `docker kill <api_container_on_droplet>` via SSH -- show it recover on dashboard
+7. `python cli.py redirect <short_code>` after delete -- show 404 JSON, not redirect
+8. Show GitHub Actions: green run, blocked run screenshot
+9. Show Discord notification
 10. Done
 
-Keep it under 2 minutes. Do not narrate every detail -- let the dashboard speak.
-
----
-
-## Stretch: Incident Response Gold
-**Only if you have 45+ minutes before the submission deadline.**
+**Stretch: Incident Response Gold (if 45+ minutes remain before deadline)**
 
 ```bash
-# On the Droplet
 PROMETHEUS_ENABLED=true \
 docker compose -f docker-compose.yml -f docker-compose.observability.yml up -d
-
-# Generate traffic
-for i in {1..20}; do
-  python cli.py submit --type send_email --payload '{"to": "test@example.com"}'
-done
-
-# Open localhost:3000 (or <droplet-ip>:3000 if port is open)
-# Confirm 4 panels have data, screenshot
-
+# Generate traffic with CLI commands
+# Screenshot 4-panel Grafana dashboard
 # Sherlock Mode: stop postgres, observe error rate spike, show log for root cause
-# Restart postgres, show recovery
 ```
 
 ---
 
-## Token Budget Notes
+## Per-Session Token Tips
 
-Highest-cost sessions are 5 (tests, pytest runs multiple times) and 8 (CLI with complex
-Rich layout). Use `/compact` proactively in both. If you hit limits mid-session, stay in
-the session and compact rather than starting cold -- prompt cache has a 5-minute lifetime.
+- Session 2 (routes) and Session 4 (tests) are the highest-token sessions
+- Use `/compact Focus on app/routes/urls.py and test results` if sessions grow long
+- Session 6 (CLI) has complex Rich layout -- use plan mode, it prevents expensive rewrites
+- If a session hits a wall, `/rewind` to last checkpoint rather than asking for a rewrite
