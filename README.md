@@ -127,8 +127,9 @@ Current tests include:
 DigitalOcean deployment guide: [`docs/deploy.md`](docs/deploy.md)
 
 CI workflow: [`.github/workflows/ci.yml`](.github/workflows/ci.yml)
-- test job runs first,
-- deploy job runs only after tests pass on `main`.
+- push trigger runs tests on all branches (`**`) so feature branches get immediate CI feedback,
+- pull requests targeting `main` also run tests to keep pre-merge visibility,
+- deploy job stays gated by `needs: test` and runs only for `push` events on `main`.
 
 ---
 
