@@ -1,4 +1,9 @@
-from app.validators import validate_url_create, validate_url_update, validate_user_create
+from app.validators import (
+    validate_delete_reason,
+    validate_url_create,
+    validate_url_update,
+    validate_user_create,
+)
 
 
 class TestValidateUrlCreate:
@@ -24,6 +29,14 @@ class TestValidateUrlCreate:
     def test_http_scheme_ok(self):
         assert validate_url_create({'original_url': 'http://example.com', 'title': 'Test', 'user_id': 1}) == []
 
+    def test_original_url_non_string(self):
+        errors = validate_url_create({'original_url': 123, 'title': 'Test', 'user_id': 1})
+        assert 'original_url must be a string' in errors
+
+    def test_title_non_string(self):
+        errors = validate_url_create({'original_url': 'https://example.com', 'title': ['bad'], 'user_id': 1})
+        assert 'title must be a string' in errors
+
 
 class TestValidateUrlUpdate:
     def test_valid_url(self):
@@ -40,6 +53,18 @@ class TestValidateUrlUpdate:
         errors = validate_url_update({'original_url': 'ftp://bad.com'})
         assert errors
 
+    def test_original_url_non_string(self):
+        errors = validate_url_update({'original_url': 999})
+        assert 'original_url must be a string' in errors
+
+    def test_title_non_string(self):
+        errors = validate_url_update({'title': {'bad': 'type'}})
+        assert 'title must be a string' in errors
+
+    def test_title_whitespace_only(self):
+        errors = validate_url_update({'title': '   '})
+        assert 'title is required' in errors
+
 
 class TestValidateUserCreate:
     def test_valid(self):
@@ -52,3 +77,24 @@ class TestValidateUserCreate:
     def test_missing_email(self):
         errors = validate_user_create({'username': 'alice'})
         assert any('email' in e for e in errors)
+
+    def test_username_non_string(self):
+        errors = validate_user_create({'username': 99, 'email': 'alice@example.com'})
+        assert 'username must be a string' in errors
+
+    def test_email_non_string(self):
+        errors = validate_user_create({'username': 'alice', 'email': False})
+        assert 'email must be a string' in errors
+
+
+class TestValidateDeleteReason:
+    def test_default_reason_valid(self):
+        assert validate_delete_reason({}) == []
+
+    def test_reason_non_string(self):
+        errors = validate_delete_reason({'reason': 123})
+        assert 'reason must be a string' in errors
+
+    def test_reason_invalid_value(self):
+        errors = validate_delete_reason({'reason': 'not_allowed'})
+        assert 'reason must be one of policy_cleanup, user_requested, duplicate' in errors
