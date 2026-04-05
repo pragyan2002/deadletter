@@ -13,6 +13,12 @@ from playhouse.sqlite_ext import JSONField
 import playhouse.postgres_ext as _pg_ext
 _pg_ext.BinaryJSONField = JSONField
 
+# Use a file-based SQLite DB for tests (not :memory:) so that the connection
+# can be closed and reopened between requests without losing data.
+_db_fd, _db_path = tempfile.mkstemp(suffix='.db')
+os.close(_db_fd)
+TEST_DB = SqliteDatabase(_db_path)
+
 os.environ.setdefault('DATABASE_NAME', 'test')
 os.environ.setdefault('DATABASE_HOST', 'localhost')
 os.environ.setdefault('DATABASE_USER', 'postgres')
@@ -29,23 +35,20 @@ def app():
 
     application = create_app()
 
-    db_fd, db_path = tempfile.mkstemp(suffix='.db')
-    os.close(db_fd)
-    test_db = SqliteDatabase(db_path)
-
     # Swap the proxy to SQLite for tests
-    db.initialize(test_db)
-    test_db.bind([User, Url, Event])
-    test_db.connect(reuse_if_open=True)
-    test_db.create_tables([User, Url, Event])
+    db.initialize(TEST_DB)
+    TEST_DB.bind([User, Url, Event])
+    TEST_DB.connect(reuse_if_open=True)
+    TEST_DB.create_tables([User, Url, Event])
 
     application.config['TESTING'] = True
     yield application
 
-    test_db.drop_tables([User, Url, Event])
-    test_db.close()
-    if os.path.exists(db_path):
-        os.unlink(db_path)
+    from app.routes.urls import wait_for_redirect_event_queue
+    wait_for_redirect_event_queue()
+
+    TEST_DB.drop_tables([User, Url, Event])
+    TEST_DB.close()
 
 
 @pytest.fixture

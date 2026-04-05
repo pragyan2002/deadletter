@@ -253,6 +253,18 @@ class TestDeleteUrl:
         assert r.status_code == 400
         assert r.get_json()['error'] == 'bad_request'
 
+    def test_delete_accepts_empty_body(self, client, user):
+        code = _create_url(client, user.id).get_json()['short_code']
+        r = client.delete(f'/urls/{code}')
+        assert r.status_code == 200
+        assert r.get_json()['is_active'] is False
+
+    def test_delete_accepts_json_null_body(self, client, user):
+        code = _create_url(client, user.id).get_json()['short_code']
+        r = client.delete(f'/urls/{code}', data='null', content_type='application/json')
+        assert r.status_code == 200
+        assert r.get_json()['is_active'] is False
+
 
 class TestErrorShape:
     def test_404_is_json(self, client):

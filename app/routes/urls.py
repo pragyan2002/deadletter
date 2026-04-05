@@ -59,6 +59,12 @@ def _queue_redirect_event(url):
     )
 
 
+def wait_for_redirect_event_queue(timeout=2):
+    """Block until currently queued redirect event jobs are drained."""
+    sentinel = _REDIRECT_EVENT_EXECUTOR.submit(lambda: None)
+    sentinel.result(timeout=timeout)
+
+
 def _url_dict(url):
     return {
         'id': url.id,
@@ -148,7 +154,11 @@ def list_urls():
 @urls_bp.route('/urls/bulk', methods=['POST'])
 def bulk_load_urls():
     try:
-        data = parse_json_object(request)
+        data = parse_json_object(
+            request,
+            allow_empty_body=True,
+            allow_null_as_empty_object=True,
+        )
     except ValueError as exc:
         message = str(exc)
         if message.startswith('Content-Type must be'):
@@ -287,7 +297,11 @@ def delete_url(short_code):
         abort(409, description=f'short_code {short_code} is already inactive')
 
     try:
-        data = parse_json_object(request)
+        data = parse_json_object(
+            request,
+            allow_empty_body=True,
+            allow_null_as_empty_object=True,
+        )
     except ValueError as exc:
         message = str(exc)
         if message.startswith('Content-Type must be'):
