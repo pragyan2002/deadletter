@@ -13,6 +13,8 @@ This project is designed around reliability and operability requirements from th
 
 ## Architecture at a glance
 
+See the full diagram: [`docs/architecture.md`](docs/architecture.md).
+
 - **API:** Flask
 - **ORM:** Peewee
 - **DB:** PostgreSQL 17
