@@ -41,8 +41,8 @@ def validate_url_update(data):
     """Validate PUT /urls/<code> request body. Returns list of error strings."""
     errors = []
 
-    if 'original_url' not in data and 'title' not in data:
-        errors.append('at least one of original_url or title is required')
+    if 'original_url' not in data and 'title' not in data and 'is_active' not in data:
+        errors.append('at least one of original_url, title, or is_active is required')
 
     if 'original_url' in data:
         original_url_value = data['original_url']
@@ -59,6 +59,11 @@ def validate_url_update(data):
             errors.append('title must be a string')
         elif not title_value.strip():
             errors.append('title is required')
+
+    if 'is_active' in data:
+        is_active_value = data['is_active']
+        if not isinstance(is_active_value, bool):
+            errors.append('is_active must be a boolean')
 
     return errors
 

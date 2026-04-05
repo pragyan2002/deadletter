@@ -65,6 +65,13 @@ class TestValidateUrlUpdate:
         errors = validate_url_update({'title': '   '})
         assert 'title is required' in errors
 
+    def test_valid_is_active_boolean(self):
+        assert validate_url_update({'is_active': False}) == []
+
+    def test_invalid_is_active_non_boolean(self):
+        errors = validate_url_update({'is_active': 'false'})
+        assert 'is_active must be a boolean' in errors
+
 
 class TestValidateUserCreate:
     def test_valid(self):

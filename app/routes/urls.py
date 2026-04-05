@@ -190,6 +190,15 @@ def update_url(short_code):
         if 'title' in data:
             url.title = data['title'].strip()
 
+        if 'is_active' in data and data['is_active'] is False:
+            url.is_active = False
+            Event.create(
+                url=url,
+                user=user,
+                event_type='deleted',
+                details={'reason': 'user_requested'},
+            )
+
         url.updated_at = datetime.now(timezone.utc)
         url.save()
 
@@ -251,3 +260,16 @@ def redirect_url(short_code):
     if not url.is_active:
         abort(404, description=f'short_code {short_code} is inactive')
     return redirect(url.original_url, code=302)
+
+
+@urls_bp.route('/urls/<short_code>/redirect')
+def redirect_url_from_details(short_code):
+    return redirect_url(short_code)
+
+
+@urls_bp.route('/urls/<int:url_id>/redirect')
+def redirect_url_from_details_by_id(url_id):
+    url = Url.get_or_none(Url.id == url_id)
+    if url is None:
+        abort(404, description=f'url {url_id} not found')
+    return redirect_url(url.short_code)
