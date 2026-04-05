@@ -14,6 +14,10 @@ def register_error_handlers(app):
     def conflict(e):
         return jsonify(error='conflict', detail=str(e.description)), 409
 
+    @app.errorhandler(415)
+    def unsupported_media_type(e):
+        return jsonify(error='unsupported_media_type', detail=str(e.description)), 415
+
     @app.errorhandler(500)
     def internal_error(e):
         from app.alerting import record_500_error  # lazy import avoids circular dependency

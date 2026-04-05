@@ -8,6 +8,7 @@ from flask import Blueprint, abort, jsonify, request
 from app.models.event import Event
 from app.models.url import Url
 from app.models.user import User
+from app.request_parsing import parse_json_object
 from app.validators import validate_event_type
 
 events_bp = Blueprint('events', __name__)
@@ -60,9 +61,13 @@ def list_events():
 
 @events_bp.route('/events', methods=['POST'])
 def create_event():
-    data = request.get_json(force=True, silent=True) or {}
-    if not isinstance(data, dict):
-        abort(400, description='request body must be an object')
+    try:
+        data = parse_json_object(request)
+    except ValueError as exc:
+        message = str(exc)
+        if message.startswith('Content-Type must be'):
+            abort(415, description=message)
+        abort(400, description=message)
 
     url_id = data.get('url_id')
     if not isinstance(url_id, int) or url_id < 1:
@@ -112,7 +117,13 @@ def create_event():
 
 @events_bp.route('/events/bulk', methods=['POST'])
 def bulk_load_events():
-    data = request.get_json(force=True, silent=True) or {}
+    try:
+        data = parse_json_object(request)
+    except ValueError as exc:
+        message = str(exc)
+        if message.startswith('Content-Type must be'):
+            abort(415, description=message)
+        abort(400, description=message)
     filename = data.get('file')
     if not filename:
         abort(400, description='file is required')
