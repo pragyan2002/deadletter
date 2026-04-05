@@ -2,6 +2,18 @@ VALID_EVENT_TYPES = {'created', 'updated', 'deleted'}
 VALID_DELETE_REASONS = {'policy_cleanup', 'user_requested', 'duplicate'}
 
 
+def _require_non_empty_string(data, field, errors):
+    value = data.get(field)
+    if not isinstance(value, str):
+        errors.append(f'{field} must be a string')
+        return None
+    stripped = value.strip()
+    if not stripped:
+        errors.append(f'{field} is required')
+        return None
+    return stripped
+
+
 def validate_url_create(data):
     """Validate POST /urls request body. Returns list of error strings."""
     errors = []

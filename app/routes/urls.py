@@ -9,7 +9,7 @@ from app.database import db
 from app.models.event import Event
 from app.models.url import Url
 from app.models.user import User
-from app.validators import validate_url_create, validate_url_update
+from app.validators import validate_delete_reason, validate_url_create, validate_url_update
 
 urls_bp = Blueprint('urls', __name__)
 
@@ -150,6 +150,10 @@ def delete_url(short_code):
         abort(409, description=f'short_code {short_code} is already inactive')
 
     data = request.get_json(silent=True) or {}
+    errors = validate_delete_reason(data)
+    if errors:
+        abort(400, description=errors[0])
+
     reason = data.get('reason', 'user_requested')
 
     user = User.get_or_none(User.id == url.user_id)
