@@ -6,13 +6,25 @@ def validate_url_create(data):
     """Validate POST /urls request body. Returns list of error strings."""
     errors = []
 
-    original_url = data.get('original_url', '').strip()
+    original_url_value = data.get('original_url', '')
+    if not isinstance(original_url_value, str):
+        errors.append('original_url must be a string')
+        original_url = ''
+    else:
+        original_url = original_url_value.strip()
+
     if not original_url:
         errors.append('original_url is required')
     elif not (original_url.startswith('http://') or original_url.startswith('https://')):
         errors.append('original_url must start with http:// or https://')
 
-    title = data.get('title', '').strip()
+    title_value = data.get('title', '')
+    if not isinstance(title_value, str):
+        errors.append('title must be a string')
+        title = ''
+    else:
+        title = title_value.strip()
+
     if not title:
         errors.append('title is required')
 
@@ -33,9 +45,20 @@ def validate_url_update(data):
         errors.append('at least one of original_url or title is required')
 
     if 'original_url' in data:
-        original_url = data['original_url'].strip()
-        if not (original_url.startswith('http://') or original_url.startswith('https://')):
-            errors.append('original_url must start with http:// or https://')
+        original_url_value = data['original_url']
+        if not isinstance(original_url_value, str):
+            errors.append('original_url must be a string')
+        else:
+            original_url = original_url_value.strip()
+            if not (original_url.startswith('http://') or original_url.startswith('https://')):
+                errors.append('original_url must start with http:// or https://')
+
+    if 'title' in data:
+        title_value = data['title']
+        if not isinstance(title_value, str):
+            errors.append('title must be a string')
+        elif not title_value.strip():
+            errors.append('title is required')
 
     return errors
 
@@ -44,10 +67,24 @@ def validate_user_create(data):
     """Validate POST /users request body. Returns list of error strings."""
     errors = []
 
-    if not data.get('username', '').strip():
+    username_value = data.get('username', '')
+    if not isinstance(username_value, str):
+        errors.append('username must be a string')
+        username = ''
+    else:
+        username = username_value.strip()
+
+    if not username:
         errors.append('username is required')
 
-    if not data.get('email', '').strip():
+    email_value = data.get('email', '')
+    if not isinstance(email_value, str):
+        errors.append('email must be a string')
+        email = ''
+    else:
+        email = email_value.strip()
+
+    if not email:
         errors.append('email is required')
 
     return errors
