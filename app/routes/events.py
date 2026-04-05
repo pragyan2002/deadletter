@@ -7,6 +7,7 @@ from flask import Blueprint, abort, jsonify, request
 
 from app.models.event import Event
 from app.models.url import Url
+from app.models.user import User
 
 events_bp = Blueprint('events', __name__)
 
@@ -26,6 +27,8 @@ def list_events():
         url = Url.get_or_none(Url.short_code == short_code)
         if url:
             query = query.where(Event.url == url)
+        else:
+            return jsonify([])
 
     event_type = request.args.get('event_type')
     if event_type is not None:
@@ -49,6 +52,51 @@ def list_events():
         }
         for e in query
     ])
+
+
+@events_bp.route('/events', methods=['POST'])
+def create_event():
+    data = request.get_json(force=True, silent=True) or {}
+
+    url_id = data.get('url_id')
+    if not isinstance(url_id, int) or url_id < 1:
+        abort(400, description='url_id must be a positive integer')
+
+    user_id = data.get('user_id')
+    if not isinstance(user_id, int) or user_id < 1:
+        abort(400, description='user_id must be a positive integer')
+
+    event_type = data.get('event_type')
+    if not isinstance(event_type, str) or not event_type.strip():
+        abort(400, description='event_type is required')
+
+    details = data.get('details', {})
+    if not isinstance(details, dict):
+        abort(400, description='details must be an object')
+
+    url = Url.get_or_none(Url.id == url_id)
+    if url is None:
+        abort(404, description=f'url {url_id} not found')
+
+    user = User.get_or_none(User.id == user_id)
+    if user is None:
+        abort(404, description=f'user {user_id} not found')
+
+    event = Event.create(
+        url=url,
+        user=user,
+        event_type=event_type.strip(),
+        details=details,
+    )
+
+    return jsonify(
+        id=event.id,
+        url_id=event.url_id,
+        user_id=event.user_id,
+        event_type=event.event_type,
+        timestamp=event.timestamp.isoformat(),
+        details=event.details,
+    ), 201
 
 
 @events_bp.route('/events/bulk', methods=['POST'])
