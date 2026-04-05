@@ -119,3 +119,28 @@ class TestMetricsAndErrors:
         assert resp.status_code == 500
         assert resp.get_json() == {'error': 'internal_error', 'detail': 'an unexpected error occurred'}
         assert called['count'] == 1
+
+    def test_update_url_atomic_when_event_creation_fails(self, app, user, monkeypatch):
+        app.config['PROPAGATE_EXCEPTIONS'] = False
+        client = app.test_client()
+
+        created = _create_url(client, user.id, url='https://before.example.com', title='Before')
+        short_code = created.get_json()['short_code']
+
+        def _fail_event_create(*args, **kwargs):
+            raise RuntimeError('forced Event.create failure')
+
+        monkeypatch.setattr('app.routes.urls.Event.create', _fail_event_create)
+
+        update_resp = client.put(
+            f'/urls/{short_code}',
+            json={'original_url': 'https://after.example.com'},
+        )
+        assert update_resp.status_code == 500
+        assert update_resp.get_json()['error'] == 'internal_error'
+
+        fetched = client.get(f'/urls/{short_code}')
+        assert fetched.status_code == 200
+        body = fetched.get_json()
+        assert body['original_url'] == 'https://before.example.com'
+        assert [e['event_type'] for e in body['events']] == ['created']

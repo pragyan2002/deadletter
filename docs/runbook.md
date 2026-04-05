@@ -29,6 +29,24 @@ docker compose logs -f api
 docker compose logs -f postgres
 ```
 
+API request and error logs are emitted as JSON for easier filtering in Docker and external log systems. Example line:
+
+```json
+{"timestamp":"2026-04-05 12:43:09,442","level":"INFO","logger":"app.request","message":"request_completed","method":"GET","path":"/health","status_code":200,"duration_ms":1.27,"request_id":"9d5f5ec2-5037-45ea-a1ad-d372b807f146"}
+```
+
+Filter API logs by level (ERROR):
+
+```bash
+docker compose logs -f api | jq -c 'fromjson? | select(.level == "ERROR")'
+```
+
+Filter API logs by request path (`/health`):
+
+```bash
+docker compose logs -f api | jq -c 'fromjson? | select(.path == "/health")'
+```
+
 ## Run migrations (create tables)
 
 ```bash
