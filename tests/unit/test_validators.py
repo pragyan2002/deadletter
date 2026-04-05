@@ -1,5 +1,6 @@
 from app.validators import (
     validate_delete_reason,
+    validate_event_type,
     validate_url_create,
     validate_url_update,
     validate_user_create,
@@ -105,3 +106,12 @@ class TestValidateDeleteReason:
     def test_reason_invalid_value(self):
         errors = validate_delete_reason({'reason': 'not_allowed'})
         assert 'reason must be one of policy_cleanup, user_requested, duplicate' in errors
+
+
+class TestValidateEventType:
+    def test_redirected_is_valid(self):
+        assert validate_event_type('redirected') == []
+
+    def test_invalid_event_type_rejected(self):
+        errors = validate_event_type('invalid')
+        assert errors == ['event_type must be one of created, updated, deleted, redirected, click']

@@ -1,4 +1,5 @@
 VALID_EVENT_TYPES = {'created', 'updated', 'deleted', 'redirected', 'click'}
+VALID_EVENT_TYPES_DISPLAY = 'created, updated, deleted, redirected, click'
 VALID_DELETE_REASONS = {'policy_cleanup', 'user_requested', 'duplicate'}
 
 
@@ -102,7 +103,7 @@ def validate_event_type(value):
     if not isinstance(value, str):
         errors.append('event_type must be a string')
     elif value not in VALID_EVENT_TYPES:
-        errors.append('event_type must be one of created, updated, deleted, redirected, click')
+        errors.append(f'event_type must be one of {VALID_EVENT_TYPES_DISPLAY}')
 
     return errors
 

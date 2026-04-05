@@ -266,10 +266,37 @@ class TestEventsRoutes:
         assert resp.status_code == 400
         assert resp.get_json()['error'] == 'bad_request'
 
+    def test_create_event_allows_redirected(self, client, user):
+        created = _create_url(client, user.id, url='https://example.com/redirected-event', title='redirected-event')
+        url_id = created.get_json()['id']
+
+        resp = client.post(
+            '/events',
+            json={
+                'url_id': url_id,
+                'user_id': user.id,
+                'event_type': 'redirected',
+                'details': {'short_code': created.get_json()['short_code']},
+            },
+        )
+        assert resp.status_code == 201
+        assert resp.get_json()['event_type'] == 'redirected'
+
     def test_list_events_invalid_event_type_rejected(self, client):
         resp = client.get('/events?event_type=totally-invalid')
         assert resp.status_code == 400
         assert resp.get_json()['error'] == 'bad_request'
+
+    def test_list_events_can_filter_redirected(self, client, user):
+        created = _create_url(client, user.id, url='https://example.com/filter-redirected', title='filter-redirected')
+        short_code = created.get_json()['short_code']
+
+        redirect_resp = client.get(f'/r/{short_code}')
+        assert redirect_resp.status_code == 302
+
+        filtered = client.get('/events?event_type=redirected')
+        assert filtered.status_code == 200
+        assert any(event['event_type'] == 'redirected' for event in filtered.get_json())
 
 
 class TestMetricsAndErrors:
