@@ -78,6 +78,18 @@ class TestRedirect:
         body = r2.get_json()
         assert body['error'] == 'not_found'
 
+    def test_active_url_redirects_from_details_endpoint(self, client, user):
+        r = _create_url(client, user.id, url='https://example.com/redirect-target')
+        data = r.get_json()
+
+        by_code = client.get(f"/urls/{data['short_code']}/redirect")
+        assert by_code.status_code == 302
+        assert by_code.headers['Location'] == 'https://example.com/redirect-target'
+
+        by_id = client.get(f"/urls/{data['id']}/redirect")
+        assert by_id.status_code == 302
+        assert by_id.headers['Location'] == 'https://example.com/redirect-target'
+
 
 class TestUpdateUrl:
     def test_update_original_url(self, client, user):
@@ -213,9 +225,9 @@ class TestUrlIdRoutesAndList:
 
         first_id = all_urls.get_json()[0]['id']
         deactivated = client.put(f'/urls/{first_id}', json={'is_active': False})
-        assert deactivated.status_code == 400
+        assert deactivated.status_code == 200
+        assert deactivated.get_json()['is_active'] is False
 
-        client.delete(f'/urls/{first_id}', json={'reason': 'policy_cleanup'})
         active_only = client.get('/urls?is_active=true')
         assert active_only.status_code == 200
         assert all(u['is_active'] is True for u in active_only.get_json())
