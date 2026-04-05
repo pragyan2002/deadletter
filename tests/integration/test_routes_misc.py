@@ -55,6 +55,32 @@ class TestUsersRoutes:
 
 
 class TestEventsRoutes:
+    def test_create_event(self, client, user):
+        created = _create_url(client, user.id, url='https://example.com/for-event', title='for event')
+        assert created.status_code == 201
+        url_id = created.get_json()['id']
+
+        resp = client.post(
+            '/events',
+            json={
+                'url_id': url_id,
+                'user_id': user.id,
+                'event_type': 'click',
+                'details': {'referrer': 'https://google.com'},
+            },
+        )
+        assert resp.status_code == 201
+        body = resp.get_json()
+        assert body['event_type'] == 'click'
+        assert body['url_id'] == url_id
+        assert body['user_id'] == user.id
+        assert body['details'] == {'referrer': 'https://google.com'}
+
+    def test_list_events_unknown_short_code_returns_empty(self, client):
+        resp = client.get('/events?short_code=DOESNTEXIST')
+        assert resp.status_code == 200
+        assert resp.get_json() == []
+
     def test_list_events_with_filters(self, client, user):
         created = _create_url(client, user.id, url='https://example.com/e1', title='E1')
         short_code = created.get_json()['short_code']
