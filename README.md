@@ -1,192 +1,181 @@
-# MLH PE Hackathon — Flask + Peewee + PostgreSQL Template
+# deadletter — Production Engineering Hackathon
 
-A minimal hackathon starter template. You get the scaffolding and database wiring — you build the models, routes, and CSV loading logic.
+A production-focused **URL Shortener with an immutable Event Audit Log** built with **Flask + Peewee + PostgreSQL**.
 
-**Stack:** Flask · Peewee ORM · PostgreSQL · uv
+This project is designed around reliability and operability requirements from the MLH Production Engineering Hackathon:
+- predictable JSON error handling,
+- transactional URL mutation + audit event writes,
+- CI gatekeeping before deploy,
+- incident-response docs and observability hooks,
+- CLI-first operations (no browser UI required).
 
-## **Important**
+---
 
-You need to work with around the seed files that you can find in [MLH PE Hackathon](https://mlh-pe-hackathon.com) platform. This will help you build the schema for the database and have some data to do some testing and submit your project for judging. If you need help with this, reach out on Discord or on the Q&A tab on the platform.
+## Architecture at a glance
 
-## Prerequisites
+- **API:** Flask
+- **ORM:** Peewee
+- **DB:** PostgreSQL 17
+- **CLI:** Typer + Rich
+- **Packaging/runtime:** `uv`
+- **Containerization:** Docker + Docker Compose
+- **Optional observability overlay:** Prometheus + Grafana
 
-- **uv** — a fast Python package manager that handles Python versions, virtual environments, and dependencies automatically.
-  Install it with:
-  ```bash
-  # macOS / Linux
-  curl -LsSf https://astral.sh/uv/install.sh | sh
+Core data model:
+- `users`
+- `urls`
+- `events` (append-only audit log of URL mutations)
 
-  # Windows (PowerShell)
-  powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
-  ```
-  For other methods see the [uv installation docs](https://docs.astral.sh/uv/getting-started/installation/).
-- PostgreSQL running locally (you can use Docker or a local instance)
+---
 
-## uv Basics
+## Key behaviors
 
-`uv` manages your Python version, virtual environment, and dependencies automatically — no manual `python -m venv` needed.
+- Create short URLs with a generated 6-character alphanumeric short code.
+- Redirect active short codes via `GET /r/<short_code>`.
+- Soft-delete URLs (`is_active=false`) instead of hard delete.
+- Every URL mutation creates an event entry (`created`, `updated`, `deleted`) in the same DB transaction.
+- Consistent JSON errors (`{"error": "...", "detail": "..."}`) for API failures.
 
-| Command | What it does |
-|---------|--------------|
-| `uv sync` | Install all dependencies (creates `.venv` automatically) |
-| `uv run <script>` | Run a script using the project's virtual environment |
-| `uv add <package>` | Add a new dependency |
-| `uv remove <package>` | Remove a dependency |
+---
 
-## Quick Start
+## Quick start (local)
+
+### 1) Prerequisites
+- [uv](https://docs.astral.sh/uv/getting-started/installation/)
+- Docker + Docker Compose
+
+### 2) Install dependencies
+```bash
+uv sync
+```
+
+### 3) Configure environment
+```bash
+cp .env.example .env
+```
+
+### 4) Start services
+```bash
+docker compose up -d
+```
+
+### 5) Verify health
+```bash
+curl http://localhost:5000/health
+# {"status":"ok"}
+```
+
+---
+
+## API overview
+
+Base URL: `http://localhost:5000`
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/health` | Service health |
+| GET | `/metrics` | CPU/RAM + app counters |
+| POST | `/users` | Create user |
+| GET | `/users/<user_id>` | User + URLs |
+| POST | `/urls` | Create short URL + `created` event |
+| GET | `/urls` | List URLs (filters supported) |
+| GET | `/urls/<short_code>` | URL details + event history |
+| PUT | `/urls/<short_code>` | Update URL + `updated` event |
+| DELETE | `/urls/<short_code>` | Soft-delete URL + `deleted` event |
+| GET | `/r/<short_code>` | Redirect if active |
+| GET | `/events` | List/filter events |
+
+Full contract/examples: [`docs/api.md`](docs/api.md)
+
+---
+
+## CLI usage
+
+The CLI is the primary interaction surface.
 
 ```bash
-# 1. Clone the repo
-git clone <repo-url> && cd mlh-pe-hackathon
-
-# 2. Install dependencies
-uv sync
-
-# 3. Create the database
-createdb hackathon_db
-
-# 4. Configure environment
-cp .env.example .env   # edit if your DB credentials differ
-
-# 5. Run the server
-uv run run.py
-
-# 6. Verify
-curl http://localhost:5000/health
-# → {"status":"ok"}
+python cli.py shorten --url https://example.com --title "Example" --user 1
+python cli.py redirect <short_code>
+python cli.py inspect <short_code>
+python cli.py list --active
+python cli.py delete <short_code> --reason user_requested
+python cli.py events --url <short_code>
+python cli.py dashboard
+python cli.py health
+python cli.py metrics
 ```
 
-## Project Structure
+---
 
-```
-mlh-pe-hackathon/
-├── app/
-│   ├── __init__.py          # App factory (create_app)
-│   ├── database.py          # DatabaseProxy, BaseModel, connection hooks
-│   ├── models/
-│   │   └── __init__.py      # Import your models here
-│   └── routes/
-│       └── __init__.py      # register_routes() — add blueprints here
-├── .env.example             # DB connection template
-├── .gitignore               # Python + uv gitignore
-├── .python-version          # Pin Python version for uv
-├── pyproject.toml           # Project metadata + dependencies
-├── run.py                   # Entry point: uv run run.py
-└── README.md
+## Testing
+
+Run all tests:
+```bash
+uv run pytest
 ```
 
-## How to Add a Model
+Current tests include:
+- unit validation tests,
+- integration tests for URL lifecycle,
+- redirect/inactive/missing behaviors,
+- error-shape checks.
 
-1. Create a file in `app/models/`, e.g. `app/models/product.py`:
+---
 
-```python
-from peewee import CharField, DecimalField, IntegerField
+## Deployment
 
-from app.database import BaseModel
+DigitalOcean deployment guide: [`docs/deploy.md`](docs/deploy.md)
 
+CI workflow: [`.github/workflows/ci.yml`](.github/workflows/ci.yml)
+- test job runs first,
+- deploy job runs only after tests pass on `main`.
 
-class Product(BaseModel):
-    name = CharField()
-    category = CharField()
-    price = DecimalField(decimal_places=2)
-    stock = IntegerField()
+---
+
+## Observability and incident response
+
+- Metrics endpoint: `GET /metrics`
+- Optional Prometheus + Grafana stack:
+  ```bash
+  docker compose -f docker-compose.yml -f docker-compose.observability.yml up -d
+  ```
+- Operational docs:
+  - [`docs/runbook.md`](docs/runbook.md)
+  - [`docs/failure-modes.md`](docs/failure-modes.md)
+  - [`docs/capacity.md`](docs/capacity.md)
+  - [`docs/decisions.md`](docs/decisions.md)
+
+---
+
+## Project structure
+
+```text
+deadletter/
+├── app/                     # Flask app, routes, models, validation, alerting
+├── tests/                   # Unit + integration tests
+├── docs/                    # API, deploy, runbook, decisions, capacity, failure modes
+├── observability/           # Prometheus + Grafana configs/dashboards
+├── .github/workflows/       # CI/CD
+├── cli.py                   # Rich/Typer CLI
+├── migrate.py               # DB table creation + optional seed loading
+├── docker-compose.yml
+└── docker-compose.observability.yml
 ```
 
-2. Import it in `app/models/__init__.py`:
+---
 
-```python
-from app.models.product import Product
-```
+## Environment variables
 
-3. Create the table (run once in a Python shell or a setup script):
+See [`.env.example`](.env.example) for full list. Important values:
+- `DATABASE_HOST`, `DATABASE_PORT`, `DATABASE_NAME`, `DATABASE_USER`, `DATABASE_PASSWORD`
+- `DISCORD_WEBHOOK_URL`
+- `PROMETHEUS_ENABLED`
+- `LOG_LEVEL`
 
-```python
-from app.database import db
-from app.models.product import Product
+---
 
-db.create_tables([Product])
-```
+## Team
 
-## How to Add Routes
+**Team name:** deadletter
 
-1. Create a blueprint in `app/routes/`, e.g. `app/routes/products.py`:
-
-```python
-from flask import Blueprint, jsonify
-from playhouse.shortcuts import model_to_dict
-
-from app.models.product import Product
-
-products_bp = Blueprint("products", __name__)
-
-
-@products_bp.route("/products")
-def list_products():
-    products = Product.select()
-    return jsonify([model_to_dict(p) for p in products])
-```
-
-2. Register it in `app/routes/__init__.py`:
-
-```python
-def register_routes(app):
-    from app.routes.products import products_bp
-    app.register_blueprint(products_bp)
-```
-
-## How to Load CSV Data
-
-```python
-import csv
-from peewee import chunked
-from app.database import db
-from app.models.product import Product
-
-def load_csv(filepath):
-    with open(filepath, newline="") as f:
-        reader = csv.DictReader(f)
-        rows = list(reader)
-
-    with db.atomic():
-        for batch in chunked(rows, 100):
-            Product.insert_many(batch).execute()
-```
-
-## Useful Peewee Patterns
-
-```python
-from peewee import fn
-from playhouse.shortcuts import model_to_dict
-
-# Select all
-products = Product.select()
-
-# Filter
-cheap = Product.select().where(Product.price < 10)
-
-# Get by ID
-p = Product.get_by_id(1)
-
-# Create
-Product.create(name="Widget", category="Tools", price=9.99, stock=50)
-
-# Convert to dict (great for JSON responses)
-model_to_dict(p)
-
-# Aggregations
-avg_price = Product.select(fn.AVG(Product.price)).scalar()
-total = Product.select(fn.SUM(Product.stock)).scalar()
-
-# Group by
-from peewee import fn
-query = (Product
-         .select(Product.category, fn.COUNT(Product.id).alias("count"))
-         .group_by(Product.category))
-```
-
-## Tips
-
-- Use `model_to_dict` from `playhouse.shortcuts` to convert model instances to dictionaries for JSON responses.
-- Wrap bulk inserts in `db.atomic()` for transactional safety and performance.
-- The template uses `teardown_appcontext` for connection cleanup, so connections are closed even when requests fail.
-- Check `.env.example` for all available configuration options.
+Built for the MLH Production Engineering Hackathon.

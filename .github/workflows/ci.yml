@@ -10,6 +10,29 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: deadletter
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_NAME: deadletter
+      DATABASE_HOST: 127.0.0.1
+      DATABASE_PORT: 5432
+      DATABASE_USER: postgres
+      DATABASE_PASSWORD: postgres
+      COVERAGE_MIN: "70"
+
     steps:
       - uses: actions/checkout@v4
 
@@ -22,8 +45,20 @@ jobs:
       - name: Install dependencies
         run: uv sync
 
-      - name: Run tests
-        run: uv run pytest --tb=short -q
+      - name: Run tests with coverage gate
+        run: |
+          uv run pytest \
+            --tb=short -q \
+            --cov=app \
+            --cov-report=term-missing \
+            --cov-report=xml \
+            --cov-fail-under=${COVERAGE_MIN}
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-xml
+          path: coverage.xml
 
   deploy:
     needs: test
