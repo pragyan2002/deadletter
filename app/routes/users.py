@@ -7,6 +7,7 @@ from flask import Blueprint, abort, jsonify, request
 
 from app.models.url import Url
 from app.models.user import User
+from app.request_parsing import parse_json_object
 from app.validators import validate_user_create
 
 users_bp = Blueprint('users', __name__)
@@ -29,9 +30,13 @@ def list_users():
 
 @users_bp.route('/users', methods=['POST'])
 def create_user():
-    data = request.get_json(force=True, silent=True) or {}
-    if not isinstance(data, dict):
-        abort(400, description='request body must be an object')
+    try:
+        data = parse_json_object(request)
+    except ValueError as exc:
+        message = str(exc)
+        if message.startswith('Content-Type must be'):
+            abort(415, description=message)
+        abort(400, description=message)
     errors = validate_user_create(data)
     if errors:
         abort(400, description=errors[0])
@@ -195,9 +200,13 @@ def update_user(user_id):
     if user is None:
         abort(404, description=f'user {user_id} not found')
 
-    data = request.get_json(force=True, silent=True) or {}
-    if not isinstance(data, dict):
-        abort(400, description='request body must be an object')
+    try:
+        data = parse_json_object(request)
+    except ValueError as exc:
+        message = str(exc)
+        if message.startswith('Content-Type must be'):
+            abort(415, description=message)
+        abort(400, description=message)
     if not data.get('username') and not data.get('email'):
         abort(400, description='at least one of username or email is required')
 

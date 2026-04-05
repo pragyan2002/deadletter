@@ -1,4 +1,5 @@
 from app.validators import (
+    parse_expires_at,
     validate_delete_reason,
     validate_event_type,
     validate_url_create,
@@ -38,6 +39,12 @@ class TestValidateUrlCreate:
         errors = validate_url_create({'original_url': 'https://example.com', 'title': ['bad'], 'user_id': 1})
         assert 'title must be a string' in errors
 
+    def test_expires_at_invalid_string(self):
+        errors = validate_url_create(
+            {'original_url': 'https://example.com', 'title': 'Test', 'user_id': 1, 'expires_at': 'not-a-date'}
+        )
+        assert 'expires_at must be a valid ISO-8601 datetime' in errors
+
 
 class TestValidateUrlUpdate:
     def test_valid_url(self):
@@ -72,6 +79,9 @@ class TestValidateUrlUpdate:
     def test_invalid_is_active_non_boolean(self):
         errors = validate_url_update({'is_active': 'false'})
         assert 'is_active must be a boolean' in errors
+
+    def test_valid_expires_at(self):
+        assert validate_url_update({'expires_at': '2026-01-01T00:00:00Z'}) == []
 
 
 class TestValidateUserCreate:
@@ -115,3 +125,12 @@ class TestValidateEventType:
     def test_invalid_event_type_rejected(self):
         errors = validate_event_type('invalid')
         assert errors == ['event_type must be one of created, updated, deleted, redirected, click']
+
+
+class TestParseExpiresAt:
+    def test_none_returns_none(self):
+        assert parse_expires_at(None) is None
+
+    def test_z_suffix_parses(self):
+        dt = parse_expires_at('2026-01-01T00:00:00Z')
+        assert dt.isoformat() == '2026-01-01T00:00:00+00:00'

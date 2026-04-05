@@ -12,6 +12,7 @@ class Url(BaseModel):
     original_url = TextField()
     title = CharField()
     is_active = BooleanField(default=True)
+    expires_at = DateTimeField(null=True)
     created_at = DateTimeField(default=lambda: datetime.now(timezone.utc))
     updated_at = DateTimeField(default=lambda: datetime.now(timezone.utc))
 

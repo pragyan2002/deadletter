@@ -1,4 +1,6 @@
 import json
+from datetime import datetime, timedelta, timezone
+from time import perf_counter, sleep
 
 
 def _create_url(client, user_id, url='https://example.com', title='Test'):
@@ -58,6 +60,37 @@ class TestCreateUrl:
         assert r2.status_code == 201
         assert r1.get_json()['short_code'] != r2.get_json()['short_code']
 
+    def test_retries_short_code_collision_and_succeeds(self, client, user, monkeypatch):
+        from app.routes import urls as urls_routes
+        code_iter = iter(['AAAAAA', 'AAAAAA', 'BBBBBB'])
+        monkeypatch.setattr(urls_routes, '_generate_short_code', lambda: next(code_iter))
+
+        first = _create_url(client, user.id, url='https://example.com/first', title='First')
+        second = _create_url(client, user.id, url='https://example.com/second', title='Second')
+
+        assert first.status_code == 201
+        assert second.status_code == 201
+        assert first.get_json()['short_code'] == 'AAAAAA'
+        assert second.get_json()['short_code'] == 'BBBBBB'
+
+    def test_create_url_rejects_non_json_content_type(self, client, user):
+        resp = client.post(
+            '/urls',
+            data=json.dumps({'original_url': 'https://example.com', 'title': 'ok', 'user_id': user.id}),
+            content_type='text/plain',
+        )
+        assert resp.status_code == 415
+        assert resp.get_json()['error'] == 'unsupported_media_type'
+
+    def test_create_url_supports_expires_at(self, client, user):
+        future = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
+        resp = client.post(
+            '/urls',
+            json={'original_url': 'https://example.com/exp', 'title': 'exp', 'user_id': user.id, 'expires_at': future},
+        )
+        assert resp.status_code == 201
+        assert resp.get_json()['expires_at'] is not None
+
 
 class TestRedirect:
     def test_active_url_redirects(self, client, user):
@@ -68,8 +101,12 @@ class TestRedirect:
         assert r2.status_code == 302
         assert r2.headers['Location'] == 'https://target.example.com'
 
-        details = client.get(f'/urls/{code}')
-        events = details.get_json()['events']
+        for _ in range(20):
+            details = client.get(f'/urls/{code}')
+            events = details.get_json()['events']
+            if events and events[-1]['event_type'] == 'redirected':
+                break
+            sleep(0.02)
         assert events[-1]['event_type'] == 'redirected'
 
     def test_missing_short_code_404_json(self, client):
@@ -104,6 +141,49 @@ class TestRedirect:
         by_id = client.get(f"/urls/{data['id']}/redirect")
         assert by_id.status_code == 302
         assert by_id.headers['Location'] == 'https://example.com/redirect-target'
+
+    def test_expired_url_404_and_no_redirect_event(self, client, user):
+        expired = (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat()
+        created = client.post(
+            '/urls',
+            json={
+                'original_url': 'https://example.com/expired',
+                'title': 'Expired',
+                'user_id': user.id,
+                'expires_at': expired,
+            },
+        )
+        assert created.status_code == 201
+        code = created.get_json()['short_code']
+
+        redirect_resp = client.get(f'/r/{code}')
+        assert redirect_resp.status_code == 404
+        assert redirect_resp.get_json()['error'] == 'not_found'
+
+        details = client.get(f'/urls/{code}')
+        event_types = [event['event_type'] for event in details.get_json()['events']]
+        assert 'redirected' not in event_types
+
+    def test_redirect_is_non_blocking_when_event_write_is_slow(self, client, user, monkeypatch):
+        from app.models.event import Event
+
+        created = _create_url(client, user.id, url='https://example.com/slow', title='Slow')
+        code = created.get_json()['short_code']
+
+        original_create = Event.create
+
+        def slow_create(*args, **kwargs):
+            sleep(0.2)
+            return original_create(*args, **kwargs)
+
+        monkeypatch.setattr(Event, 'create', slow_create)
+
+        started = perf_counter()
+        resp = client.get(f'/r/{code}')
+        elapsed = perf_counter() - started
+
+        assert resp.status_code == 302
+        assert elapsed < 0.15
 
 
 class TestUpdateUrl:
