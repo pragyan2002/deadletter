@@ -83,3 +83,71 @@ docker compose -f docker-compose.yml -f docker-compose.observability.yml up -d
 ```
 
 Grafana at `http://<DROPLET_IP>:3000` (admin/admin).
+
+## Rollback
+
+Use this if a fresh deploy introduces user-facing errors, sustained health-check failures, or clear regressions.
+
+### When to rollback (decision checklist)
+
+- [ ] `curl http://<DROPLET_IP>:5000/health` fails repeatedly (not a one-off blip).
+- [ ] Core user flow is broken (for example, your primary API path returns 5xx or bad data).
+- [ ] Error rate/latency is significantly worse than the last stable baseline.
+- [ ] Recent deploy is the most likely cause (timing matches incident start).
+- [ ] A fast forward fix is not safer/faster than restoring known-good behavior.
+
+### Step-by-step rollback commands
+
+1. **Identify the previous known-good commit or tag**
+   ```bash
+   ssh root@<DROPLET_IP>
+   cd /app
+
+   # Show recent history and tags to choose a known-good revision
+   git log --oneline --decorate -n 20
+   git tag --sort=-creatordate | head -n 20
+
+   # Set this to a trusted commit SHA or tag (example values)
+   export ROLLBACK_REF=<KNOWN_GOOD_SHA_OR_TAG>
+   git show --no-patch --oneline "$ROLLBACK_REF"
+   ```
+
+2. **Pull/reset on the Droplet to that revision**
+   ```bash
+   cd /app
+   git fetch --all --tags --prune
+   git reset --hard "$ROLLBACK_REF"
+   git status --short --branch
+   ```
+
+3. **Rebuild and restart containers**
+   ```bash
+   cd /app
+   docker compose down
+   docker compose up -d --build
+   docker compose ps
+   ```
+
+4. **Run smoke checks (`/health` + one URL flow)**
+   ```bash
+   # Health endpoint
+   curl -fsS http://<DROPLET_IP>:5000/health
+
+   # One representative flow (replace with your real endpoint/path)
+   curl -i http://<DROPLET_IP>:5000/<CRITICAL_PATH>
+   ```
+
+5. **Confirm logs and metrics are normal**
+   ```bash
+   docker compose logs --since=10m api worker
+   docker compose logs --since=10m postgres
+   ```
+   If observability is enabled, verify dashboards (error rate, latency, saturation) are back to expected levels.
+
+### Rollback verification checklist
+
+- [ ] `/health` is green across multiple checks.
+- [ ] One critical end-to-end URL flow succeeds.
+- [ ] No sustained 5xx bursts in container logs.
+- [ ] CPU/memory/restart counts are stable after rollback.
+- [ ] Incident note records rollback ref, time, and operator.
