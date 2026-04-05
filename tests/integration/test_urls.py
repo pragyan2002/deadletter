@@ -51,6 +51,13 @@ class TestCreateUrl:
         assert r.status_code == 400
         assert r.get_json()['error'] == 'bad_request'
 
+    def test_repeated_creates_generate_distinct_short_codes(self, client, user):
+        r1 = _create_url(client, user.id, url='https://example.com/one', title='One')
+        r2 = _create_url(client, user.id, url='https://example.com/two', title='Two')
+        assert r1.status_code == 201
+        assert r2.status_code == 201
+        assert r1.get_json()['short_code'] != r2.get_json()['short_code']
+
 
 class TestRedirect:
     def test_active_url_redirects(self, client, user):
@@ -60,6 +67,10 @@ class TestRedirect:
         r2 = client.get(f'/r/{code}')
         assert r2.status_code == 302
         assert r2.headers['Location'] == 'https://target.example.com'
+
+        details = client.get(f'/urls/{code}')
+        events = details.get_json()['events']
+        assert events[-1]['event_type'] == 'redirected'
 
     def test_missing_short_code_404_json(self, client):
         r = client.get('/r/XXXXXX')
@@ -77,6 +88,10 @@ class TestRedirect:
         assert r2.status_code == 404
         body = r2.get_json()
         assert body['error'] == 'not_found'
+
+        details = client.get(f'/urls/{code}')
+        event_types = [event['event_type'] for event in details.get_json()['events']]
+        assert 'redirected' not in event_types
 
     def test_active_url_redirects_from_details_endpoint(self, client, user):
         r = _create_url(client, user.id, url='https://example.com/redirect-target')

@@ -42,6 +42,8 @@ def _url_dict(url):
 @urls_bp.route('/urls', methods=['POST'])
 def create_url():
     data = request.get_json(force=True, silent=True) or {}
+    if not isinstance(data, dict):
+        abort(400, description='request body must be an object')
     errors = validate_url_create(data)
     if errors:
         abort(400, description=errors[0])
@@ -170,6 +172,8 @@ def update_url(short_code):
         abort(404, description=f'short_code {short_code} is inactive')
 
     data = request.get_json(force=True, silent=True) or {}
+    if not isinstance(data, dict):
+        abort(400, description='request body must be an object')
     errors = validate_url_update(data)
     if errors:
         abort(400, description=errors[0])
@@ -222,6 +226,8 @@ def delete_url(short_code):
         abort(409, description=f'short_code {short_code} is already inactive')
 
     data = request.get_json(force=True, silent=True) or {}
+    if not isinstance(data, dict):
+        abort(400, description='request body must be an object')
     errors = validate_delete_reason(data)
     if errors:
         abort(400, description=errors[0])
@@ -259,6 +265,15 @@ def redirect_url(short_code):
         abort(404, description=f'short_code {short_code} not found')
     if not url.is_active:
         abort(404, description=f'short_code {short_code} is inactive')
+
+    user = User.get_or_none(User.id == url.user_id)
+    Event.create(
+        url=url,
+        user=user,
+        event_type='redirected',
+        details={'short_code': short_code, 'original_url': url.original_url},
+    )
+
     return redirect(url.original_url, code=302)
 
 

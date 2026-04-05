@@ -57,6 +57,8 @@ def list_events():
 @events_bp.route('/events', methods=['POST'])
 def create_event():
     data = request.get_json(force=True, silent=True) or {}
+    if not isinstance(data, dict):
+        abort(400, description='request body must be an object')
 
     url_id = data.get('url_id')
     if not isinstance(url_id, int) or url_id < 1:
