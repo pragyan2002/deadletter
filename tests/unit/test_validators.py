@@ -1,4 +1,9 @@
-from app.validators import validate_url_create, validate_url_update, validate_user_create
+from app.validators import (
+    validate_delete_reason,
+    validate_url_create,
+    validate_url_update,
+    validate_user_create,
+)
 
 
 class TestValidateUrlCreate:
@@ -80,3 +85,16 @@ class TestValidateUserCreate:
     def test_email_non_string(self):
         errors = validate_user_create({'username': 'alice', 'email': False})
         assert 'email must be a string' in errors
+
+
+class TestValidateDeleteReason:
+    def test_default_reason_valid(self):
+        assert validate_delete_reason({}) == []
+
+    def test_reason_non_string(self):
+        errors = validate_delete_reason({'reason': 123})
+        assert 'reason must be a string' in errors
+
+    def test_reason_invalid_value(self):
+        errors = validate_delete_reason({'reason': 'not_allowed'})
+        assert 'reason must be one of policy_cleanup, user_requested, duplicate' in errors
