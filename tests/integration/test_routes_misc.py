@@ -29,6 +29,15 @@ class TestUsersRoutes:
         missing_resp = client.get('/users/99999')
         assert missing_resp.status_code == 404
 
+    def test_create_user_non_string_fields_rejected(self, client):
+        bad_username = client.post('/users', json={'username': 123, 'email': 'alice@example.com'})
+        assert bad_username.status_code == 400
+        assert bad_username.get_json()['error'] == 'bad_request'
+
+        bad_email = client.post('/users', json={'username': 'alice', 'email': 456})
+        assert bad_email.status_code == 400
+        assert bad_email.get_json()['error'] == 'bad_request'
+
 
 class TestEventsRoutes:
     def test_list_events_with_filters(self, client, user):
@@ -95,3 +104,28 @@ class TestMetricsAndErrors:
         assert resp.status_code == 500
         assert resp.get_json() == {'error': 'internal_error', 'detail': 'an unexpected error occurred'}
         assert called['count'] == 1
+
+    def test_update_url_atomic_when_event_creation_fails(self, app, user, monkeypatch):
+        app.config['PROPAGATE_EXCEPTIONS'] = False
+        client = app.test_client()
+
+        created = _create_url(client, user.id, url='https://before.example.com', title='Before')
+        short_code = created.get_json()['short_code']
+
+        def _fail_event_create(*args, **kwargs):
+            raise RuntimeError('forced Event.create failure')
+
+        monkeypatch.setattr('app.routes.urls.Event.create', _fail_event_create)
+
+        update_resp = client.put(
+            f'/urls/{short_code}',
+            json={'original_url': 'https://after.example.com'},
+        )
+        assert update_resp.status_code == 500
+        assert update_resp.get_json()['error'] == 'internal_error'
+
+        fetched = client.get(f'/urls/{short_code}')
+        assert fetched.status_code == 200
+        body = fetched.get_json()
+        assert body['original_url'] == 'https://before.example.com'
+        assert [e['event_type'] for e in body['events']] == ['created']
