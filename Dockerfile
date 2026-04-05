@@ -9,4 +9,4 @@ COPY . .
 
 EXPOSE 5000
 
-CMD ["sh", "-c", "uv run migrate.py && uv run run.py"]
+CMD ["sh", "-c", "uv run migrate.py && uv run gunicorn --workers 2 --threads 4 --timeout 30 --bind 0.0.0.0:5000 run:app"]

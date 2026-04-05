@@ -13,7 +13,7 @@
 **Symptom:** 409 on POST /urls (rare).
 **Cause:** Two concurrent requests generated the same 6-char code.
 **Detection:** Response body contains `{"error": "conflict", ...}`.
-**Recovery:** Client retries the POST. The route itself retries code generation before inserting.
+**Recovery:** Client retries the POST.
 **Prevention:** Unique constraint on urls.short_code enforced at DB level.
 
 ## Event insert fails after URL write

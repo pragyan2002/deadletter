@@ -54,6 +54,22 @@ class TestUsersRoutes:
         }
         assert set(dup_email.get_json().keys()) == {'error', 'detail'}
 
+    def test_create_user_exact_duplicate_returns_409_json(self, client):
+        first = client.post('/users', json={'username': 'dup', 'email': 'dup@example.com'})
+        assert first.status_code == 201
+
+        dup = client.post('/users', json={'username': 'dup', 'email': 'dup@example.com'})
+        assert dup.status_code == 409
+        assert dup.get_json() == {
+            'error': 'conflict',
+            'detail': 'username or email already exists',
+        }
+
+    def test_bulk_users_rejects_path_escape(self, client):
+        resp = client.post('/users/bulk', json={'file': '../users.csv'})
+        assert resp.status_code == 400
+        assert resp.get_json()['error'] == 'bad_request'
+
     def test_list_users_pagination(self, client):
         for i in range(3):
             created = client.post(
@@ -234,6 +250,27 @@ class TestEventsRoutes:
         assert resp.status_code == 404
         assert resp.get_json()['error'] == 'not_found'
 
+    def test_create_event_invalid_event_type_rejected(self, client, user):
+        created = _create_url(client, user.id, url='https://example.com/invalid-event', title='invalid-event')
+        url_id = created.get_json()['id']
+
+        resp = client.post(
+            '/events',
+            json={
+                'url_id': url_id,
+                'user_id': user.id,
+                'event_type': 'totally-invalid',
+                'details': {},
+            },
+        )
+        assert resp.status_code == 400
+        assert resp.get_json()['error'] == 'bad_request'
+
+    def test_list_events_invalid_event_type_rejected(self, client):
+        resp = client.get('/events?event_type=totally-invalid')
+        assert resp.status_code == 400
+        assert resp.get_json()['error'] == 'bad_request'
+
 
 class TestMetricsAndErrors:
     def test_metrics_endpoint(self, client):
@@ -295,3 +332,18 @@ class TestMetricsAndErrors:
         body = fetched.get_json()
         assert body['original_url'] == 'https://before.example.com'
         assert [e['event_type'] for e in body['events']] == ['created']
+
+    def test_health_returns_503_when_database_is_unavailable(self, app, monkeypatch):
+        app.config['PROPAGATE_EXCEPTIONS'] = False
+        client = app.test_client()
+
+        def _fail_db_check(*args, **kwargs):
+            raise RuntimeError('db down')
+
+        monkeypatch.setattr('app.routes.health._check_database', _fail_db_check)
+
+        resp = client.get('/health')
+        assert resp.status_code == 503
+        body = resp.get_json()
+        assert body['status'] == 'degraded'
+        assert body['detail'].startswith('database unavailable:')

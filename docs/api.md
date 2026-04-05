@@ -11,12 +11,18 @@ All error responses follow this shape:
 
 ## GET /health
 
-Returns 200 if the app is running.
+Returns process and database health.
 
 **Response:**
 ```json
 {"status": "ok"}
 ```
+
+**Degraded response (DB unavailable):**
+```json
+{"status": "degraded", "detail": "database unavailable: <ExceptionType>"}
+```
+Status code: `503`.
 
 ---
 

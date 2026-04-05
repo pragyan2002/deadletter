@@ -42,13 +42,7 @@ def create_user():
             email=data['email'].strip(),
         )
     except peewee.IntegrityError:
-        existing = User.get_or_none(
-            (User.username == data['username'].strip()) &
-            (User.email == data['email'].strip())
-        )
-        if existing is None:
-            abort(409, description='username or email already exists')
-        user = existing
+        abort(409, description='username or email already exists')
     return jsonify(id=user.id, username=user.username, email=user.email,
                    created_at=user.created_at.isoformat()), 201
 
@@ -131,17 +125,11 @@ def bulk_load_users():
         count = _load_rows(csv.DictReader(upload.stream.read().decode('utf-8').splitlines()))
         return jsonify(loaded=count, file=filename)
 
-    search_dirs = [SEED_DIR, os.getcwd()]
-    path = None
-    for directory in search_dirs:
-        candidate = os.path.normpath(os.path.join(directory, filename))
-        if directory == SEED_DIR and not candidate.startswith(SEED_DIR):
-            abort(400, description='invalid file path')
-        if os.path.exists(candidate):
-            path = candidate
-            break
+    path = os.path.normpath(os.path.join(SEED_DIR, filename))
+    if not path.startswith(SEED_DIR):
+        abort(400, description='invalid file path')
 
-    if path is None:
+    if not os.path.exists(path):
         row_count = data.get('row_count') if isinstance(data, dict) else None
         try:
             row_count = int(row_count) if row_count is not None else None
