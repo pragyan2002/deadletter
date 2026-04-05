@@ -28,6 +28,7 @@ def _generate_short_code():
 
 def _url_dict(url):
     return {
+        'id': url.id,
         'short_code': url.short_code,
         'original_url': url.original_url,
         'title': url.title,
@@ -152,6 +153,14 @@ def get_url(short_code):
     return jsonify(result)
 
 
+@urls_bp.route('/urls/<int:url_id>')
+def get_url_by_id(url_id):
+    url = Url.get_or_none(Url.id == url_id)
+    if url is None:
+        abort(404, description=f'url {url_id} not found')
+    return get_url(url.short_code)
+
+
 @urls_bp.route('/urls/<short_code>', methods=['PUT'])
 def update_url(short_code):
     url = Url.get_or_none(Url.short_code == short_code)
@@ -187,6 +196,14 @@ def update_url(short_code):
     return jsonify(_url_dict(url))
 
 
+@urls_bp.route('/urls/<int:url_id>', methods=['PUT'])
+def update_url_by_id(url_id):
+    url = Url.get_or_none(Url.id == url_id)
+    if url is None:
+        abort(404, description=f'url {url_id} not found')
+    return update_url(url.short_code)
+
+
 @urls_bp.route('/urls/<short_code>', methods=['DELETE'])
 def delete_url(short_code):
     url = Url.get_or_none(Url.short_code == short_code)
@@ -216,6 +233,14 @@ def delete_url(short_code):
         )
 
     return jsonify(_url_dict(url))
+
+
+@urls_bp.route('/urls/<int:url_id>', methods=['DELETE'])
+def delete_url_by_id(url_id):
+    url = Url.get_or_none(Url.id == url_id)
+    if url is None:
+        abort(404, description=f'url {url_id} not found')
+    return delete_url(url.short_code)
 
 
 @urls_bp.route('/r/<short_code>')
