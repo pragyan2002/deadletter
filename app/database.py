@@ -1,7 +1,7 @@
 import os
 import urllib.parse
 
-from peewee import DatabaseProxy, Model, PostgresqlDatabase
+from peewee import DatabaseProxy, Model, PostgresqlDatabase, SqliteDatabase
 
 db = DatabaseProxy()
 
@@ -13,7 +13,10 @@ class BaseModel(Model):
 
 def init_db(app):
     database_url = os.environ.get("DATABASE_URL")
-    if database_url:
+    if database_url and database_url.startswith("sqlite:///"):
+        sqlite_path = database_url.replace("sqlite:///", "", 1)
+        database = SqliteDatabase(sqlite_path)
+    elif database_url:
         parsed = urllib.parse.urlparse(database_url)
         database = PostgresqlDatabase(
             parsed.path.lstrip('/'),
@@ -22,7 +25,7 @@ def init_db(app):
             user=parsed.username,
             password=parsed.password,
         )
-    else:
+    elif os.environ.get("DATABASE_ENGINE", "").lower() == "postgres":
         database = PostgresqlDatabase(
             os.environ.get("DATABASE_NAME", "hackathon_db"),
             host=os.environ.get("DATABASE_HOST", "localhost"),
@@ -30,6 +33,8 @@ def init_db(app):
             user=os.environ.get("DATABASE_USER", "postgres"),
             password=os.environ.get("DATABASE_PASSWORD", "postgres"),
         )
+    else:
+        database = SqliteDatabase(os.environ.get("SQLITE_PATH", "deadletter.db"))
     db.initialize(database)
 
     @app.before_request

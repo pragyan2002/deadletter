@@ -4,7 +4,7 @@ from time import perf_counter
 from dotenv import load_dotenv
 from flask import Flask, g, got_request_exception
 
-from app.database import init_db
+from app.database import db, init_db
 from app.errors import register_error_handlers
 from app.logging_config import configure_logging
 from app.routes import register_routes
@@ -20,6 +20,12 @@ def create_app():
     init_db(app)
 
     from app import models  # noqa: F401 - registers models with Peewee
+    from app.models.event import Event
+    from app.models.url import Url
+    from app.models.user import User
+
+    with db.connection_context():
+        db.create_tables([User, Url, Event], safe=True)
 
     @app.before_request
     def start_request_timer():
