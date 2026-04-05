@@ -1,7 +1,9 @@
 import csv
+import logging
 import os
 import random
 import string
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 
 from flask import Blueprint, abort, jsonify, redirect, request
@@ -11,19 +13,56 @@ from app.database import db
 from app.models.event import Event
 from app.models.url import Url
 from app.models.user import User
-from app.validators import validate_delete_reason, validate_url_create, validate_url_update
+from app.request_parsing import parse_json_object
+from app.validators import parse_expires_at, validate_delete_reason, validate_url_create, validate_url_update
 
 urls_bp = Blueprint('urls', __name__)
 
 SEED_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), '..', '..', 'seed'))
+_REDIRECT_EVENT_EXECUTOR = ThreadPoolExecutor(max_workers=4)
+_LOGGER = logging.getLogger(__name__)
 
 
 def _generate_short_code():
     chars = string.ascii_letters + string.digits
-    while True:
-        code = ''.join(random.choices(chars, k=6))
-        if not Url.select().where(Url.short_code == code).exists():
-            return code
+    return ''.join(random.choices(chars, k=6))
+
+
+def _url_is_expired(url):
+    return url.expires_at is not None and url.expires_at <= datetime.now(timezone.utc)
+
+
+def _emit_redirect_event(url_id, user_id, short_code, original_url):
+    try:
+        with db.connection_context():
+            url = Url.get_or_none(Url.id == url_id)
+            if url is None:
+                return
+            user = User.get_or_none(User.id == user_id)
+            Event.create(
+                url=url,
+                user=user,
+                event_type='redirected',
+                details={'short_code': short_code, 'original_url': original_url},
+            )
+    except Exception:
+        _LOGGER.exception("failed_to_record_redirect_event")
+
+
+def _queue_redirect_event(url):
+    _REDIRECT_EVENT_EXECUTOR.submit(
+        _emit_redirect_event,
+        url.id,
+        url.user_id,
+        url.short_code,
+        url.original_url,
+    )
+
+
+def wait_for_redirect_event_queue(timeout=2):
+    """Block until currently queued redirect event jobs are drained."""
+    sentinel = _REDIRECT_EVENT_EXECUTOR.submit(lambda: None)
+    sentinel.result(timeout=timeout)
 
 
 def _url_dict(url):
@@ -33,6 +72,7 @@ def _url_dict(url):
         'original_url': url.original_url,
         'title': url.title,
         'is_active': url.is_active,
+        'expires_at': url.expires_at.isoformat() if url.expires_at else None,
         'user_id': url.user_id,
         'created_at': url.created_at.isoformat(),
         'updated_at': url.updated_at.isoformat(),
@@ -41,9 +81,13 @@ def _url_dict(url):
 
 @urls_bp.route('/urls', methods=['POST'])
 def create_url():
-    data = request.get_json(force=True, silent=True) or {}
-    if not isinstance(data, dict):
-        abort(400, description='request body must be an object')
+    try:
+        data = parse_json_object(request)
+    except ValueError as exc:
+        message = str(exc)
+        if message.startswith('Content-Type must be'):
+            abort(415, description=message)
+        abort(400, description=message)
     errors = validate_url_create(data)
     if errors:
         abort(400, description=errors[0])
@@ -52,24 +96,33 @@ def create_url():
     if user is None:
         abort(404, description=f"user {data['user_id']} not found")
 
-    short_code = _generate_short_code()
+    expires_at = parse_expires_at(data.get('expires_at'))
 
-    try:
-        with db.atomic():
-            url = Url.create(
-                user=user,
-                short_code=short_code,
-                original_url=data['original_url'].strip(),
-                title=data['title'].strip(),
-            )
-            Event.create(
-                url=url,
-                user=user,
-                event_type='created',
-                details={'short_code': short_code, 'original_url': url.original_url},
-            )
-    except IntegrityError:
-        abort(409, description=f'short_code {short_code} already exists')
+    url = None
+    max_attempts = 8
+    for _ in range(max_attempts):
+        short_code = _generate_short_code()
+        try:
+            with db.atomic():
+                url = Url.create(
+                    user=user,
+                    short_code=short_code,
+                    original_url=data['original_url'].strip(),
+                    title=data['title'].strip(),
+                    expires_at=expires_at,
+                )
+                Event.create(
+                    url=url,
+                    user=user,
+                    event_type='created',
+                    details={'short_code': short_code, 'original_url': url.original_url},
+                )
+            break
+        except IntegrityError:
+            continue
+
+    if url is None:
+        abort(409, description='unable to generate a unique short_code, please retry')
 
     return jsonify(_url_dict(url)), 201
 
@@ -100,7 +153,17 @@ def list_urls():
 
 @urls_bp.route('/urls/bulk', methods=['POST'])
 def bulk_load_urls():
-    data = request.get_json(force=True, silent=True) or {}
+    try:
+        data = parse_json_object(
+            request,
+            allow_empty_body=True,
+            allow_null_as_empty_object=True,
+        )
+    except ValueError as exc:
+        message = str(exc)
+        if message.startswith('Content-Type must be'):
+            abort(415, description=message)
+        abort(400, description=message)
     filename = data.get('file')
     if not filename:
         abort(400, description='file is required')
@@ -124,6 +187,7 @@ def bulk_load_urls():
                     'original_url': row['original_url'],
                     'title': row['title'],
                     'is_active': row['is_active'].lower() == 'true',
+                    'expires_at': datetime.fromisoformat(row['expires_at']) if row.get('expires_at') else None,
                     'created_at': datetime.fromisoformat(row['created_at']),
                     'updated_at': datetime.fromisoformat(row['updated_at']),
                 },
@@ -171,9 +235,13 @@ def update_url(short_code):
     if not url.is_active:
         abort(404, description=f'short_code {short_code} is inactive')
 
-    data = request.get_json(force=True, silent=True) or {}
-    if not isinstance(data, dict):
-        abort(400, description='request body must be an object')
+    try:
+        data = parse_json_object(request)
+    except ValueError as exc:
+        message = str(exc)
+        if message.startswith('Content-Type must be'):
+            abort(415, description=message)
+        abort(400, description=message)
     errors = validate_url_update(data)
     if errors:
         abort(400, description=errors[0])
@@ -203,6 +271,9 @@ def update_url(short_code):
                 details={'reason': 'user_requested'},
             )
 
+        if 'expires_at' in data:
+            url.expires_at = parse_expires_at(data['expires_at'])
+
         url.updated_at = datetime.now(timezone.utc)
         url.save()
 
@@ -225,9 +296,17 @@ def delete_url(short_code):
     if not url.is_active:
         abort(409, description=f'short_code {short_code} is already inactive')
 
-    data = request.get_json(force=True, silent=True) or {}
-    if not isinstance(data, dict):
-        abort(400, description='request body must be an object')
+    try:
+        data = parse_json_object(
+            request,
+            allow_empty_body=True,
+            allow_null_as_empty_object=True,
+        )
+    except ValueError as exc:
+        message = str(exc)
+        if message.startswith('Content-Type must be'):
+            abort(415, description=message)
+        abort(400, description=message)
     errors = validate_delete_reason(data)
     if errors:
         abort(400, description=errors[0])
@@ -265,15 +344,10 @@ def redirect_url(short_code):
         abort(404, description=f'short_code {short_code} not found')
     if not url.is_active:
         abort(404, description=f'short_code {short_code} is inactive')
+    if _url_is_expired(url):
+        abort(404, description=f'short_code {short_code} is expired')
 
-    user = User.get_or_none(User.id == url.user_id)
-    with db.atomic():
-        Event.create(
-            url=url,
-            user=user,
-            event_type='redirected',
-            details={'short_code': short_code, 'original_url': url.original_url},
-        )
+    _queue_redirect_event(url)
 
     return redirect(url.original_url, code=302)
 

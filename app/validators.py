@@ -1,6 +1,19 @@
+from datetime import datetime, timezone
+
 VALID_EVENT_TYPES = {'created', 'updated', 'deleted', 'redirected', 'click'}
 VALID_EVENT_TYPES_DISPLAY = 'created, updated, deleted, redirected, click'
 VALID_DELETE_REASONS = {'policy_cleanup', 'user_requested', 'duplicate'}
+
+
+def _parse_iso_datetime(value):
+    if not isinstance(value, str):
+        raise ValueError('datetime must be an ISO-8601 string')
+
+    normalized = value.strip().replace('Z', '+00:00')
+    dt = datetime.fromisoformat(normalized)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
 
 
 def validate_url_create(data):
@@ -35,6 +48,16 @@ def validate_url_create(data):
     elif not isinstance(user_id, int) or user_id < 1:
         errors.append('user_id must be a positive integer')
 
+    if 'expires_at' in data and data['expires_at'] is not None:
+        expires_at_value = data['expires_at']
+        if not isinstance(expires_at_value, str):
+            errors.append('expires_at must be an ISO-8601 string or null')
+        else:
+            try:
+                _parse_iso_datetime(expires_at_value)
+            except ValueError:
+                errors.append('expires_at must be a valid ISO-8601 datetime')
+
     return errors
 
 
@@ -42,8 +65,8 @@ def validate_url_update(data):
     """Validate PUT /urls/<code> request body. Returns list of error strings."""
     errors = []
 
-    if 'original_url' not in data and 'title' not in data and 'is_active' not in data:
-        errors.append('at least one of original_url, title, or is_active is required')
+    if 'original_url' not in data and 'title' not in data and 'is_active' not in data and 'expires_at' not in data:
+        errors.append('at least one of original_url, title, is_active, or expires_at is required')
 
     if 'original_url' in data:
         original_url_value = data['original_url']
@@ -65,6 +88,16 @@ def validate_url_update(data):
         is_active_value = data['is_active']
         if not isinstance(is_active_value, bool):
             errors.append('is_active must be a boolean')
+
+    if 'expires_at' in data and data['expires_at'] is not None:
+        expires_at_value = data['expires_at']
+        if not isinstance(expires_at_value, str):
+            errors.append('expires_at must be an ISO-8601 string or null')
+        else:
+            try:
+                _parse_iso_datetime(expires_at_value)
+            except ValueError:
+                errors.append('expires_at must be a valid ISO-8601 datetime')
 
     return errors
 
@@ -119,3 +152,10 @@ def validate_delete_reason(data):
         errors.append('reason must be one of policy_cleanup, user_requested, duplicate')
 
     return errors
+
+
+def parse_expires_at(value):
+    """Parse optional expires_at values from API payloads to UTC datetimes."""
+    if value is None:
+        return None
+    return _parse_iso_datetime(value)

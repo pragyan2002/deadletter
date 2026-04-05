@@ -1,5 +1,6 @@
 from app.models.url import Url
 import io
+from time import sleep
 from pathlib import Path
 
 
@@ -257,6 +258,18 @@ class TestEventsRoutes:
         assert resp.status_code == 400
         assert resp.get_json()['error'] == 'bad_request'
 
+    def test_create_event_rejects_non_json_content_type(self, client, user):
+        created = _create_url(client, user.id, url='https://example.com/non-json', title='non-json')
+        url_id = created.get_json()['id']
+
+        resp = client.post(
+            '/events',
+            data='{"url_id": %d, "user_id": %d, "event_type": "click", "details": {}}' % (url_id, user.id),
+            content_type='text/plain',
+        )
+        assert resp.status_code == 415
+        assert resp.get_json()['error'] == 'unsupported_media_type'
+
     def test_create_event_rejects_wrong_credential_types(self, client, user):
         created = _create_url(client, user.id, url='https://example.com/typed', title='typed')
         url_id = created.get_json()['id']
@@ -333,9 +346,16 @@ class TestEventsRoutes:
         redirect_resp = client.get(f'/r/{short_code}')
         assert redirect_resp.status_code == 302
 
-        filtered = client.get('/events?event_type=redirected')
-        assert filtered.status_code == 200
-        assert any(event['event_type'] == 'redirected' for event in filtered.get_json())
+        redirected_seen = False
+        for _ in range(20):
+            filtered = client.get('/events?event_type=redirected')
+            assert filtered.status_code == 200
+            redirected_seen = any(event['event_type'] == 'redirected' for event in filtered.get_json())
+            if redirected_seen:
+                break
+            sleep(0.02)
+
+        assert redirected_seen
 
 
 class TestMetricsAndErrors:
