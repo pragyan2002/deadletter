@@ -16,4 +16,6 @@ def register_error_handlers(app):
 
     @app.errorhandler(500)
     def internal_error(e):
+        from app.alerting import record_500_error  # lazy import avoids circular dependency
+        record_500_error()
         return jsonify(error='internal_error', detail='an unexpected error occurred'), 500

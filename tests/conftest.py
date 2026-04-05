@@ -1,4 +1,5 @@
 import os
+import tempfile
 
 import pytest
 from peewee import SqliteDatabase
@@ -12,8 +13,13 @@ from playhouse.sqlite_ext import JSONField
 import playhouse.postgres_ext as _pg_ext
 _pg_ext.BinaryJSONField = JSONField
 
-# Use an in-memory SQLite DB for tests -- no Postgres required
-TEST_DB = SqliteDatabase(':memory:')
+# Use a file-based SQLite DB for tests (not :memory:) so that the connection
+# can be closed and reopened between requests without losing data. The Flask
+# teardown_appcontext hook closes the DB after every request; :memory: would
+# give a fresh empty database on the next reconnect, breaking multi-request tests.
+_db_fd, _db_path = tempfile.mkstemp(suffix='.db')
+os.close(_db_fd)
+TEST_DB = SqliteDatabase(_db_path)
 
 os.environ.setdefault('DATABASE_NAME', 'test')
 os.environ.setdefault('DATABASE_HOST', 'localhost')
