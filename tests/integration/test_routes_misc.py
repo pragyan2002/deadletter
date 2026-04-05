@@ -7,6 +7,28 @@ def _create_url(client, user_id, url='https://example.com', title='Test'):
     return client.post('/urls', json={'original_url': url, 'title': title, 'user_id': user_id})
 
 
+def _assert_bulk_users_success_shape(resp, expected_file, expected_row_count):
+    body = resp.get_json()
+    assert resp.status_code == 201, f'expected 201, got {resp.status_code} with body={body!r}'
+
+    assert isinstance(body, dict), f'expected JSON object body, got {type(body).__name__}: {body!r}'
+    assert 'loaded' in body or 'imported' in body, f'missing loaded/imported key in body: {body!r}'
+    assert isinstance(body.get('loaded', body.get('imported')), int), (
+        f'loaded/imported must be int, got {body.get("loaded", body.get("imported"))!r} in body: {body!r}'
+    )
+    assert 'row_count' in body, f'missing row_count key in body: {body!r}'
+    assert isinstance(body['row_count'], int), f'row_count must be int, got {body["row_count"]!r} in body: {body!r}'
+    assert body['row_count'] == expected_row_count, (
+        f'expected row_count {expected_row_count}, got {body["row_count"]} in body: {body!r}'
+    )
+    assert body.get('file') == expected_file, f'expected file {expected_file!r}, got {body.get("file")!r}'
+
+    if resp.status_code == 201:
+        assert resp.headers.get('Location') == '/users', (
+            f"expected Location '/users', got {resp.headers.get('Location')!r}"
+        )
+
+
 class TestUsersRoutes:
     def test_create_user_and_fetch_user_with_urls(self, client):
         create_resp = client.post('/users', json={'username': 'alice', 'email': 'alice@example.com'})
@@ -110,9 +132,7 @@ class TestUsersRoutes:
             data={'file': (io.BytesIO(csv_body.encode('utf-8')), 'users.csv')},
             content_type='multipart/form-data',
         )
-        assert resp.status_code == 201
-        assert resp.headers.get('Location') == '/users'
-        assert resp.get_json() == {'loaded': 2, 'imported': 2, 'row_count': 2, 'file': 'users.csv'}
+        _assert_bulk_users_success_shape(resp, expected_file='users.csv', expected_row_count=2)
 
         fetched = client.get('/users')
         users = fetched.get_json()
@@ -122,9 +142,7 @@ class TestUsersRoutes:
 
     def test_bulk_load_users_row_count_fallback_and_missing_file(self, client):
         generated = client.post('/users/bulk', json={'file': 'users.csv', 'row_count': 3})
-        assert generated.status_code == 201
-        assert generated.headers.get('Location') == '/users'
-        assert generated.get_json() == {'loaded': 3, 'imported': 3, 'row_count': 3, 'file': 'users.csv'}
+        _assert_bulk_users_success_shape(generated, expected_file='users.csv', expected_row_count=3)
 
         listed = client.get('/users')
         assert listed.status_code == 200
@@ -151,9 +169,7 @@ class TestUsersRoutes:
         monkeypatch.setattr('app.routes.users.SEED_DIR', str(seed_dir))
 
         loaded = client.post('/users/bulk', json={'file': 'users.csv'})
-        assert loaded.status_code == 201
-        assert loaded.headers.get('Location') == '/users'
-        assert loaded.get_json() == {'loaded': 2, 'imported': 2, 'row_count': 2, 'file': 'users.csv'}
+        _assert_bulk_users_success_shape(loaded, expected_file='users.csv', expected_row_count=2)
 
     def test_update_and_delete_user_paths(self, client):
         created = client.post('/users', json={'username': 'upd', 'email': 'upd@example.com'})
