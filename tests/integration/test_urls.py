@@ -41,6 +41,16 @@ class TestCreateUrl:
         r = client.post('/urls', json={'user_id': user.id})
         assert r.status_code == 400
 
+    def test_non_string_original_url_rejected(self, client, user):
+        r = client.post('/urls', json={'original_url': 123, 'title': 'ok', 'user_id': user.id})
+        assert r.status_code == 400
+        assert r.get_json()['error'] == 'bad_request'
+
+    def test_non_string_title_rejected(self, client, user):
+        r = client.post('/urls', json={'original_url': 'https://example.com', 'title': 123, 'user_id': user.id})
+        assert r.status_code == 400
+        assert r.get_json()['error'] == 'bad_request'
+
 
 class TestRedirect:
     def test_active_url_redirects(self, client, user):
@@ -92,6 +102,16 @@ class TestUpdateUrl:
         r = client.put(f'/urls/{code}', json={})
         assert r.status_code == 400
 
+    def test_update_non_string_fields_rejected(self, client, user):
+        code = _create_url(client, user.id).get_json()['short_code']
+        r = client.put(f'/urls/{code}', json={'original_url': 123})
+        assert r.status_code == 400
+        assert r.get_json()['error'] == 'bad_request'
+
+        r2 = client.put(f'/urls/{code}', json={'title': 456})
+        assert r2.status_code == 400
+        assert r2.get_json()['error'] == 'bad_request'
+
 
 class TestDeleteUrl:
     def test_soft_delete(self, client, user):
@@ -114,6 +134,18 @@ class TestDeleteUrl:
         assert len(deleted) == 1
         assert deleted[0]['details']['reason'] == 'duplicate'
 
+    def test_invalid_delete_reason_rejected(self, client, user):
+        code = _create_url(client, user.id).get_json()['short_code']
+        r = client.delete(f'/urls/{code}', json={'reason': 'invalid'})
+        assert r.status_code == 400
+        assert r.get_json()['error'] == 'bad_request'
+
+    def test_non_string_delete_reason_rejected(self, client, user):
+        code = _create_url(client, user.id).get_json()['short_code']
+        r = client.delete(f'/urls/{code}', json={'reason': 42})
+        assert r.status_code == 400
+        assert r.get_json()['error'] == 'bad_request'
+
 
 class TestErrorShape:
     def test_404_is_json(self, client):
@@ -127,3 +159,22 @@ class TestErrorShape:
         assert r.status_code == 400
         body = r.get_json()
         assert set(body.keys()) == {'error', 'detail'}
+
+    def test_unknown_short_code_endpoints_return_json_not_html(self, client):
+        for method, path in [
+            ('GET', '/urls/NOTEXIST'),
+            ('GET', '/r/NOTEXIST'),
+            ('PUT', '/urls/NOTEXIST'),
+            ('DELETE', '/urls/NOTEXIST'),
+        ]:
+            if method == 'GET':
+                r = client.get(path)
+            elif method == 'PUT':
+                r = client.put(path, json={'title': 'ignored'})
+            else:
+                r = client.delete(path, json={'reason': 'user_requested'})
+
+            assert r.status_code == 404
+            assert r.is_json
+            assert r.content_type.startswith('application/json')
+            assert r.get_json()['error'] == 'not_found'
