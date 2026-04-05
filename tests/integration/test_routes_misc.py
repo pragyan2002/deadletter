@@ -31,6 +31,16 @@ def _assert_bulk_users_success_shape(resp, expected_file, expected_row_count):
 
 
 class TestUsersRoutes:
+    def test_create_user(self, client):
+        payload = {'username': 'testuser_create', 'email': 'testuser_create@example.com'}
+        created = client.post('/users', json=payload)
+
+        assert created.status_code == 201
+        body = created.get_json()
+        assert body['username'] == payload['username']
+        assert body['email'] == payload['email']
+        assert isinstance(body['id'], int)
+
     def test_create_user_and_fetch_user_with_urls(self, client):
         create_resp = client.post('/users', json={'username': 'alice', 'email': 'alice@example.com'})
         assert create_resp.status_code == 201
