@@ -1,6 +1,6 @@
 import random
 import string
-from datetime import datetime
+from datetime import datetime, timezone
 
 from flask import Blueprint, abort, jsonify, redirect, request
 from peewee import IntegrityError
@@ -135,7 +135,7 @@ def update_url(short_code):
         if 'title' in data:
             url.title = data['title'].strip()
 
-        url.updated_at = datetime.utcnow()
+        url.updated_at = datetime.now(timezone.utc)
         url.save()
 
     return jsonify(_url_dict(url))
@@ -156,7 +156,7 @@ def delete_url(short_code):
 
     with db.atomic():
         url.is_active = False
-        url.updated_at = datetime.utcnow()
+        url.updated_at = datetime.now(timezone.utc)
         url.save()
         Event.create(
             url=url,
