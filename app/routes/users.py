@@ -46,23 +46,25 @@ def create_user():
 
 @users_bp.route('/users/bulk', methods=['POST'])
 def bulk_load_users():
-    data = request.get_json(force=True, silent=True) or {}
-    filename = data.get('file')
+    data = request.get_json(silent=True) or request.form.to_dict() or {}
+    upload = request.files.get('file')
+
+    filename = None
+    if upload and upload.filename:
+        filename = upload.filename
+    elif data.get('file'):
+        filename = data.get('file')
+
     if not filename:
         abort(400, description='file is required')
     if not filename.endswith('.csv'):
         abort(400, description='file must be a .csv')
 
-    path = os.path.normpath(os.path.join(SEED_DIR, filename))
-    if not path.startswith(SEED_DIR):
-        abort(400, description='invalid file path')
-    if not os.path.exists(path):
-        abort(400, description=f'{filename} not found')
-
     from datetime import datetime
-    count = 0
-    with open(path, newline='', encoding='utf-8') as f:
-        for row in csv.DictReader(f):
+
+    def _load_rows(rows):
+        loaded = 0
+        for row in rows:
             User.get_or_create(
                 id=int(row['id']),
                 defaults={
@@ -71,7 +73,28 @@ def bulk_load_users():
                     'created_at': datetime.fromisoformat(row['created_at']),
                 },
             )
-            count += 1
+            loaded += 1
+        return loaded
+
+    if upload:
+        count = _load_rows(csv.DictReader(upload.stream.read().decode('utf-8').splitlines()))
+        return jsonify(loaded=count, file=filename)
+
+    search_dirs = [SEED_DIR, os.getcwd()]
+    path = None
+    for directory in search_dirs:
+        candidate = os.path.normpath(os.path.join(directory, filename))
+        if directory == SEED_DIR and not candidate.startswith(SEED_DIR):
+            abort(400, description='invalid file path')
+        if os.path.exists(candidate):
+            path = candidate
+            break
+
+    if path is None:
+        abort(400, description=f'{filename} not found')
+
+    with open(path, newline='', encoding='utf-8') as f:
+        count = _load_rows(csv.DictReader(f))
 
     return jsonify(loaded=count, file=filename)
 
