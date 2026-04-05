@@ -166,11 +166,28 @@ deadletter/
 
 ## Environment variables
 
-See [`.env.example`](.env.example) for full list. Important values:
-- `DATABASE_HOST`, `DATABASE_PORT`, `DATABASE_NAME`, `DATABASE_USER`, `DATABASE_PASSWORD`
-- `DISCORD_WEBHOOK_URL`
-- `PROMETHEUS_ENABLED`
-- `LOG_LEVEL`
+The app and CLI support the following environment variables.
+
+| Variable | Required? | Default | Example | Where used |
+|---|---|---|---|---|
+| `DATABASE_URL` | Optional | _(empty)_ | `postgres://postgres:postgres@localhost:5432/deadletter` | `app/database.py` (highest-priority DB config) |
+| `DATABASE_ENGINE` | Optional | _(empty in code)_ | `postgres` | `app/database.py` (fallback selector when `DATABASE_URL` is unset) |
+| `DATABASE_NAME` | Optional | `hackathon_db` | `deadletter` | `app/database.py` (Postgres fallback mode) |
+| `DATABASE_HOST` | Optional | `localhost` | `postgres` | `app/database.py` (Postgres fallback mode) |
+| `DATABASE_PORT` | Optional | `5432` | `5432` | `app/database.py` (Postgres fallback mode) |
+| `DATABASE_USER` | Optional | `postgres` | `postgres` | `app/database.py` (Postgres fallback mode) |
+| `DATABASE_PASSWORD` | Optional | `postgres` | `postgres` | `app/database.py` (Postgres fallback mode) |
+| `SQLITE_PATH` | Optional | `deadletter.db` | `/data/deadletter.db` | `app/database.py` (SQLite fallback mode) |
+| `API_URL` | Optional | `http://localhost:5000` | `http://127.0.0.1:5000` | `cli.py` (CLI API base URL) |
+| `DISCORD_WEBHOOK_URL` | Optional | _(empty)_ | `https://discord.com/api/webhooks/<id>/<token>` | `app/alerting.py` (enables/disables alerting thread) |
+| `PROMETHEUS_ENABLED` | Optional | `false` (compose/runtime default) | `true` | `docker-compose.yml` (container env for observability toggles; not currently read directly in app code) |
+| `LOG_LEVEL` | Optional | `INFO` (compose/runtime default) | `DEBUG` | `docker-compose.yml` (container env; app logger currently defaults to `INFO`) |
+| `FLASK_DEBUG` | Optional | framework-dependent | `true` | Flask runtime / local development workflow |
+
+Notes:
+- `DATABASE_URL` takes precedence over all other database variables.
+- If `DATABASE_URL` is not set and `DATABASE_ENGINE=postgres`, Postgres fallback variables are used.
+- If neither applies, SQLite is used with `SQLITE_PATH`.
 
 ---
 
