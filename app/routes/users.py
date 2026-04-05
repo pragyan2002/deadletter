@@ -67,45 +67,63 @@ def bulk_load_users():
     if not filename.endswith('.csv'):
         abort(400, description='file must be a .csv')
 
+    def _parse_created_at(value):
+        if not value:
+            return datetime.now(timezone.utc)
+        raw = value.strip()
+        if not raw:
+            return datetime.now(timezone.utc)
+        try:
+            return datetime.fromisoformat(raw.replace('Z', '+00:00'))
+        except ValueError:
+            return datetime.now(timezone.utc)
+
+    def _bulk_insert(records):
+        if not records:
+            return
+        # Keep INSERT batches small for sqlite and predictable memory usage.
+        chunk_size = 200
+        for i in range(0, len(records), chunk_size):
+            User.insert_many(records[i:i + chunk_size]).on_conflict_ignore().execute()
+
     def _load_rows(rows):
         loaded = 0
+        records = []
         for row in rows:
             username = (row.get('username') or '').strip()
             email = (row.get('email') or '').strip()
             if not username or not email:
                 continue
 
-            defaults = {
-                'created_at': datetime.fromisoformat(row['created_at'])
-                if row.get('created_at')
-                else datetime.now(timezone.utc),
+            record = {
+                'username': username,
+                'email': email,
+                'created_at': _parse_created_at(row.get('created_at')),
             }
+            raw_id = (row.get('id') or '').strip()
+            if raw_id.isdigit():
+                record['id'] = int(raw_id)
 
-            raw_id = row.get('id')
-            if raw_id:
-                User.get_or_create(
-                    id=int(raw_id),
-                    defaults={**defaults, 'username': username, 'email': email},
-                )
-            else:
-                User.get_or_create(
-                    username=username,
-                    defaults={**defaults, 'email': email},
-                )
+            records.append(record)
             loaded += 1
+
+        _bulk_insert(records)
         return loaded
 
     def _load_generated_users(row_count):
-        loaded = 0
+        records = []
+        now = datetime.now(timezone.utc)
         for i in range(1, row_count + 1):
-            username = f'testuser_{i:04d}'
-            email = f'{username}@example.com'
-            User.get_or_create(
-                username=username,
-                defaults={'email': email, 'created_at': datetime.now(timezone.utc)},
+            username = f'bulk_user_{i:04d}'
+            records.append(
+                {
+                    'username': username,
+                    'email': f'{username}@example.com',
+                    'created_at': now,
+                }
             )
-            loaded += 1
-        return loaded
+        _bulk_insert(records)
+        return row_count
 
     if upload:
         count = _load_rows(csv.DictReader(upload.stream.read().decode('utf-8').splitlines()))
