@@ -178,3 +178,57 @@ class TestErrorShape:
             assert r.is_json
             assert r.content_type.startswith('application/json')
             assert r.get_json()['error'] == 'not_found'
+
+
+class TestUrlIdRoutesAndList:
+    def test_get_put_delete_by_id(self, client, user):
+        created = _create_url(client, user.id, url='https://example.com/by-id', title='By ID')
+        body = created.get_json()
+        url_id = body['id']
+
+        by_id = client.get(f'/urls/{url_id}')
+        assert by_id.status_code == 200
+        assert by_id.get_json()['short_code'] == body['short_code']
+
+        updated = client.put(f'/urls/{url_id}', json={'title': 'Updated via ID'})
+        assert updated.status_code == 200
+        assert updated.get_json()['title'] == 'Updated via ID'
+
+        deleted = client.delete(f'/urls/{url_id}', json={'reason': 'user_requested'})
+        assert deleted.status_code == 200
+        assert deleted.get_json()['is_active'] is False
+
+    def test_list_urls_filters_and_pagination(self, client, user):
+        _create_url(client, user.id, url='https://example.com/a', title='A')
+        _create_url(client, user.id, url='https://example.com/b', title='B')
+
+        all_urls = client.get('/urls')
+        assert all_urls.status_code == 200
+        assert isinstance(all_urls.get_json(), list)
+        assert len(all_urls.get_json()) == 2
+
+        by_user = client.get(f'/urls?user_id={user.id}')
+        assert by_user.status_code == 200
+        assert len(by_user.get_json()) == 2
+
+        first_id = all_urls.get_json()[0]['id']
+        deactivated = client.put(f'/urls/{first_id}', json={'is_active': False})
+        assert deactivated.status_code == 400
+
+        client.delete(f'/urls/{first_id}', json={'reason': 'policy_cleanup'})
+        active_only = client.get('/urls?is_active=true')
+        assert active_only.status_code == 200
+        assert all(u['is_active'] is True for u in active_only.get_json())
+
+        paged = client.get('/urls?page=1&per_page=1')
+        assert paged.status_code == 200
+        assert len(paged.get_json()) == 1
+
+    def test_bulk_load_urls_validation_errors(self, client):
+        missing_file = client.post('/urls/bulk', json={})
+        assert missing_file.status_code == 400
+        assert missing_file.get_json()['error'] == 'bad_request'
+
+        wrong_extension = client.post('/urls/bulk', json={'file': 'users.txt'})
+        assert wrong_extension.status_code == 400
+        assert wrong_extension.get_json()['error'] == 'bad_request'
