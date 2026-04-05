@@ -76,11 +76,28 @@ def bulk_load_users():
 
     def _bulk_insert(records):
         if not records:
-            return
+            return 0
+        before_count = User.select().count()
         # Keep INSERT batches small for sqlite and predictable memory usage.
         chunk_size = 200
         for i in range(0, len(records), chunk_size):
             User.insert_many(records[i:i + chunk_size]).on_conflict_ignore().execute()
+        after_count = User.select().count()
+        return max(0, after_count - before_count)
+
+    def _bulk_success(count, filename, created=False):
+        response = jsonify(
+            loaded=count,
+            imported=count,
+            row_count=count,
+            file=filename,
+        )
+        if created and count > 0:
+            response.status_code = 201
+            response.headers['Location'] = '/users'
+            return response
+        response.status_code = 200
+        return response
 
     def _load_rows(rows):
         loaded = 0
@@ -103,8 +120,8 @@ def bulk_load_users():
             records.append(record)
             loaded += 1
 
-        _bulk_insert(records)
-        return loaded
+        created_count = _bulk_insert(records)
+        return loaded, created_count > 0
 
     def _load_generated_users(row_count):
         records = []
@@ -118,12 +135,12 @@ def bulk_load_users():
                     'created_at': now,
                 }
             )
-        _bulk_insert(records)
-        return row_count
+        created_count = _bulk_insert(records)
+        return row_count, created_count > 0
 
     if upload:
-        count = _load_rows(csv.DictReader(upload.stream.read().decode('utf-8').splitlines()))
-        return jsonify(loaded=count, file=filename)
+        count, created = _load_rows(csv.DictReader(upload.stream.read().decode('utf-8').splitlines()))
+        return _bulk_success(count, filename, created=created)
 
     path = os.path.normpath(os.path.join(SEED_DIR, filename))
     if not path.startswith(SEED_DIR):
@@ -136,14 +153,14 @@ def bulk_load_users():
         except (TypeError, ValueError):
             row_count = None
         if filename == 'users.csv' and row_count and row_count > 0:
-            count = _load_generated_users(row_count)
-            return jsonify(loaded=count, file=filename)
+            count, created = _load_generated_users(row_count)
+            return _bulk_success(count, filename, created=created)
         abort(400, description=f'{filename} not found')
 
     with open(path, newline='', encoding='utf-8') as f:
-        count = _load_rows(csv.DictReader(f))
+        count, created = _load_rows(csv.DictReader(f))
 
-    return jsonify(loaded=count, file=filename)
+    return _bulk_success(count, filename, created=created)
 
 
 @users_bp.route('/users/<int:user_id>')

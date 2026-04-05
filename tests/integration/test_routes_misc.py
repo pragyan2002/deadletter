@@ -1,5 +1,6 @@
 from app.models.url import Url
 import io
+from pathlib import Path
 
 
 def _create_url(client, user_id, url='https://example.com', title='Test'):
@@ -109,8 +110,9 @@ class TestUsersRoutes:
             data={'file': (io.BytesIO(csv_body.encode('utf-8')), 'users.csv')},
             content_type='multipart/form-data',
         )
-        assert resp.status_code == 200
-        assert resp.get_json() == {'loaded': 2, 'file': 'users.csv'}
+        assert resp.status_code == 201
+        assert resp.headers.get('Location') == '/users'
+        assert resp.get_json() == {'loaded': 2, 'imported': 2, 'row_count': 2, 'file': 'users.csv'}
 
         fetched = client.get('/users')
         users = fetched.get_json()
@@ -120,8 +122,9 @@ class TestUsersRoutes:
 
     def test_bulk_load_users_row_count_fallback_and_missing_file(self, client):
         generated = client.post('/users/bulk', json={'file': 'users.csv', 'row_count': 3})
-        assert generated.status_code == 200
-        assert generated.get_json() == {'loaded': 3, 'file': 'users.csv'}
+        assert generated.status_code == 201
+        assert generated.headers.get('Location') == '/users'
+        assert generated.get_json() == {'loaded': 3, 'imported': 3, 'row_count': 3, 'file': 'users.csv'}
 
         listed = client.get('/users')
         assert listed.status_code == 200
@@ -131,6 +134,26 @@ class TestUsersRoutes:
         missing = client.post('/users/bulk', json={'file': 'does-not-exist.csv', 'row_count': 'x'})
         assert missing.status_code == 400
         assert missing.get_json()['error'] == 'bad_request'
+
+    def test_bulk_load_users_seed_file_returns_201_with_location(self, client, monkeypatch, tmp_path):
+        seed_dir = Path(tmp_path)
+        seed_file = seed_dir / 'users.csv'
+        seed_file.write_text(
+            '\n'.join(
+                [
+                    'id,username,email,created_at',
+                    '10,seed_user_1,seed_user_1@example.com,2026-01-01T00:00:00Z',
+                    '11,seed_user_2,seed_user_2@example.com,',
+                ]
+            ),
+            encoding='utf-8',
+        )
+        monkeypatch.setattr('app.routes.users.SEED_DIR', str(seed_dir))
+
+        loaded = client.post('/users/bulk', json={'file': 'users.csv'})
+        assert loaded.status_code == 201
+        assert loaded.headers.get('Location') == '/users'
+        assert loaded.get_json() == {'loaded': 2, 'imported': 2, 'row_count': 2, 'file': 'users.csv'}
 
     def test_update_and_delete_user_paths(self, client):
         created = client.post('/users', json={'username': 'upd', 'email': 'upd@example.com'})
