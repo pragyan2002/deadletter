@@ -28,7 +28,7 @@ def list_users():
 
 @users_bp.route('/users', methods=['POST'])
 def create_user():
-    data = request.get_json(silent=True) or {}
+    data = request.get_json(force=True, silent=True) or {}
     errors = validate_user_create(data)
     if errors:
         abort(400, description=errors[0])
@@ -46,7 +46,7 @@ def create_user():
 
 @users_bp.route('/users/bulk', methods=['POST'])
 def bulk_load_users():
-    data = request.get_json(silent=True) or {}
+    data = request.get_json(force=True, silent=True) or {}
     filename = data.get('file')
     if not filename:
         abort(400, description='file is required')
@@ -108,7 +108,7 @@ def update_user(user_id):
     if user is None:
         abort(404, description=f'user {user_id} not found')
 
-    data = request.get_json(silent=True) or {}
+    data = request.get_json(force=True, silent=True) or {}
     if not data.get('username') and not data.get('email'):
         abort(400, description='at least one of username or email is required')
 

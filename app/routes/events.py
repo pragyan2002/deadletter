@@ -53,7 +53,7 @@ def list_events():
 
 @events_bp.route('/events/bulk', methods=['POST'])
 def bulk_load_events():
-    data = request.get_json(silent=True) or {}
+    data = request.get_json(force=True, silent=True) or {}
     filename = data.get('file')
     if not filename:
         abort(400, description='file is required')

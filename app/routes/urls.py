@@ -40,7 +40,7 @@ def _url_dict(url):
 
 @urls_bp.route('/urls', methods=['POST'])
 def create_url():
-    data = request.get_json(silent=True) or {}
+    data = request.get_json(force=True, silent=True) or {}
     errors = validate_url_create(data)
     if errors:
         abort(400, description=errors[0])
@@ -97,7 +97,7 @@ def list_urls():
 
 @urls_bp.route('/urls/bulk', methods=['POST'])
 def bulk_load_urls():
-    data = request.get_json(silent=True) or {}
+    data = request.get_json(force=True, silent=True) or {}
     filename = data.get('file')
     if not filename:
         abort(400, description='file is required')
@@ -160,7 +160,7 @@ def update_url(short_code):
     if not url.is_active:
         abort(404, description=f'short_code {short_code} is inactive')
 
-    data = request.get_json(silent=True) or {}
+    data = request.get_json(force=True, silent=True) or {}
     errors = validate_url_update(data)
     if errors:
         abort(400, description=errors[0])
@@ -195,7 +195,7 @@ def delete_url(short_code):
     if not url.is_active:
         abort(409, description=f'short_code {short_code} is already inactive')
 
-    data = request.get_json(silent=True) or {}
+    data = request.get_json(force=True, silent=True) or {}
     errors = validate_delete_reason(data)
     if errors:
         abort(400, description=errors[0])

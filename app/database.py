@@ -1,4 +1,5 @@
 import os
+import urllib.parse
 
 from peewee import DatabaseProxy, Model, PostgresqlDatabase
 
@@ -11,13 +12,24 @@ class BaseModel(Model):
 
 
 def init_db(app):
-    database = PostgresqlDatabase(
-        os.environ.get("DATABASE_NAME", "hackathon_db"),
-        host=os.environ.get("DATABASE_HOST", "localhost"),
-        port=int(os.environ.get("DATABASE_PORT", 5432)),
-        user=os.environ.get("DATABASE_USER", "postgres"),
-        password=os.environ.get("DATABASE_PASSWORD", "postgres"),
-    )
+    database_url = os.environ.get("DATABASE_URL")
+    if database_url:
+        parsed = urllib.parse.urlparse(database_url)
+        database = PostgresqlDatabase(
+            parsed.path.lstrip('/'),
+            host=parsed.hostname,
+            port=parsed.port or 5432,
+            user=parsed.username,
+            password=parsed.password,
+        )
+    else:
+        database = PostgresqlDatabase(
+            os.environ.get("DATABASE_NAME", "hackathon_db"),
+            host=os.environ.get("DATABASE_HOST", "localhost"),
+            port=int(os.environ.get("DATABASE_PORT", 5432)),
+            user=os.environ.get("DATABASE_USER", "postgres"),
+            password=os.environ.get("DATABASE_PASSWORD", "postgres"),
+        )
     db.initialize(database)
 
     @app.before_request
