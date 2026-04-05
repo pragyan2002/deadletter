@@ -30,6 +30,8 @@ def list_users():
 @users_bp.route('/users', methods=['POST'])
 def create_user():
     data = request.get_json(force=True, silent=True) or {}
+    if not isinstance(data, dict):
+        abort(400, description='request body must be an object')
     errors = validate_user_create(data)
     if errors:
         abort(400, description=errors[0])
@@ -171,12 +173,18 @@ def update_user(user_id):
         abort(404, description=f'user {user_id} not found')
 
     data = request.get_json(force=True, silent=True) or {}
+    if not isinstance(data, dict):
+        abort(400, description='request body must be an object')
     if not data.get('username') and not data.get('email'):
         abort(400, description='at least one of username or email is required')
 
     if 'username' in data:
+        if not isinstance(data['username'], str):
+            abort(400, description='username must be a string')
         user.username = data['username'].strip()
     if 'email' in data:
+        if not isinstance(data['email'], str):
+            abort(400, description='email must be a string')
         user.email = data['email'].strip()
 
     try:

@@ -109,6 +109,43 @@ class TestEventsRoutes:
         assert by_event_type.status_code == 200
         assert any(e['details'].get('reason') == 'duplicate' for e in by_event_type.get_json())
 
+    def test_create_event_rejects_non_object_body(self, client):
+        resp = client.post('/events', json='not-an-object')
+        assert resp.status_code == 400
+        assert resp.get_json()['error'] == 'bad_request'
+
+    def test_create_event_rejects_wrong_credential_types(self, client, user):
+        created = _create_url(client, user.id, url='https://example.com/typed', title='typed')
+        url_id = created.get_json()['id']
+
+        resp = client.post(
+            '/events',
+            json={
+                'url_id': url_id,
+                'user_id': '1',
+                'event_type': 'click',
+                'details': {'referrer': 'https://example.com'},
+            },
+        )
+        assert resp.status_code == 400
+        assert resp.get_json()['error'] == 'bad_request'
+
+    def test_create_event_unknown_user_rejected(self, client, user):
+        created = _create_url(client, user.id, url='https://example.com/unknown-user', title='unknown-user')
+        url_id = created.get_json()['id']
+
+        resp = client.post(
+            '/events',
+            json={
+                'url_id': url_id,
+                'user_id': 999999,
+                'event_type': 'click',
+                'details': {'referrer': 'https://example.com'},
+            },
+        )
+        assert resp.status_code == 404
+        assert resp.get_json()['error'] == 'not_found'
+
 
 class TestMetricsAndErrors:
     def test_metrics_endpoint(self, client):
