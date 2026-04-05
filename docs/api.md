@@ -170,7 +170,7 @@ Reason values: `policy_cleanup`, `user_requested`, `duplicate`. Defaults to `use
 
 ## GET /r/<short_code>
 
-Redirect to the original URL.
+Redirect to the original URL and persist a `redirected` audit event.
 
 **Response:**
 - 302 redirect if active
@@ -181,3 +181,47 @@ Redirect to the original URL.
 ## GET /events
 
 List events. Optional filters: `?url_id=1`, `?short_code=ABC123`, `?event_type=created`.
+
+Canonical event types:
+- `created`
+- `updated`
+- `deleted`
+- `redirected`
+- `click`
+
+If `event_type` is provided and not one of the canonical values above, the API returns `400`.
+
+**Example response:**
+```json
+[
+  {
+    "id": 11,
+    "url_id": 7,
+    "user_id": 2,
+    "event_type": "redirected",
+    "timestamp": "2026-03-31T15:22:10+00:00",
+    "details": {
+      "short_code": "ABC123",
+      "original_url": "https://example.com"
+    }
+  }
+]
+```
+
+---
+
+## POST /events
+
+Create an event for a URL/user pair.
+
+**Body:**
+```json
+{
+  "url_id": 7,
+  "user_id": 2,
+  "event_type": "redirected",
+  "details": {"short_code": "ABC123"}
+}
+```
+
+`event_type` must be one of: `created`, `updated`, `deleted`, `redirected`, `click`.

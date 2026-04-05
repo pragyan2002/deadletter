@@ -16,6 +16,12 @@
 **Decision:** Every POST/PUT/DELETE that touches a URL also writes an Event, wrapped in db.atomic().
 **Reason:** If the event write fails, the URL change rolls back. The audit log is always consistent with the URL state. This is a hard requirement for the hidden reliability score.
 
+## Redirects are persisted as first-class events
+
+**Decision:** Use canonical event types `created`, `updated`, `deleted`, `redirected`, and `click`; persist a `redirected` event on every successful `/r/<short_code>` redirect.
+**Reason:** Redirects are user-visible access actions and part of the audit trail. Keeping them in the canonical enum makes validation and filtering predictable across `/events`, URL details, and manual event creation.
+**Trade-off:** Redirect-heavy URLs generate more event rows and write load. We accept this for audit completeness and consistent semantics.
+
 ## Separate env vars for DB (not DATABASE_URL)
 
 **Decision:** Keep template's DATABASE_NAME, DATABASE_HOST, etc. instead of a single DATABASE_URL.

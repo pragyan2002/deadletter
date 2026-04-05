@@ -267,12 +267,13 @@ def redirect_url(short_code):
         abort(404, description=f'short_code {short_code} is inactive')
 
     user = User.get_or_none(User.id == url.user_id)
-    Event.create(
-        url=url,
-        user=user,
-        event_type='redirected',
-        details={'short_code': short_code, 'original_url': url.original_url},
-    )
+    with db.atomic():
+        Event.create(
+            url=url,
+            user=user,
+            event_type='redirected',
+            details={'short_code': short_code, 'original_url': url.original_url},
+        )
 
     return redirect(url.original_url, code=302)
 
