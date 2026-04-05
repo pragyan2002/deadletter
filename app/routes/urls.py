@@ -1,3 +1,5 @@
+import csv
+import os
 import random
 import string
 from datetime import datetime, timezone
@@ -12,6 +14,8 @@ from app.models.user import User
 from app.validators import validate_delete_reason, validate_url_create, validate_url_update
 
 urls_bp = Blueprint('urls', __name__)
+
+SEED_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), '..', '..', 'seed'))
 
 
 def _generate_short_code():
@@ -81,7 +85,49 @@ def list_urls():
     elif active == 'false':
         query = query.where(Url.is_active == False)
 
-    return jsonify([_url_dict(u) for u in query.order_by(Url.created_at.desc())])
+    page = request.args.get('page', type=int)
+    per_page = request.args.get('per_page', type=int)
+    if page is not None and per_page is not None:
+        query = query.order_by(Url.created_at.desc()).paginate(page, per_page)
+    else:
+        query = query.order_by(Url.created_at.desc())
+
+    return jsonify([_url_dict(u) for u in query])
+
+
+@urls_bp.route('/urls/bulk', methods=['POST'])
+def bulk_load_urls():
+    data = request.get_json(silent=True) or {}
+    filename = data.get('file')
+    if not filename:
+        abort(400, description='file is required')
+    if not filename.endswith('.csv'):
+        abort(400, description='file must be a .csv')
+
+    path = os.path.normpath(os.path.join(SEED_DIR, filename))
+    if not path.startswith(SEED_DIR):
+        abort(400, description='invalid file path')
+    if not os.path.exists(path):
+        abort(400, description=f'{filename} not found')
+
+    count = 0
+    with open(path, newline='', encoding='utf-8') as f:
+        for row in csv.DictReader(f):
+            Url.get_or_create(
+                id=int(row['id']),
+                defaults={
+                    'user_id': int(row['user_id']),
+                    'short_code': row['short_code'],
+                    'original_url': row['original_url'],
+                    'title': row['title'],
+                    'is_active': row['is_active'].lower() == 'true',
+                    'created_at': datetime.fromisoformat(row['created_at']),
+                    'updated_at': datetime.fromisoformat(row['updated_at']),
+                },
+            )
+            count += 1
+
+    return jsonify(loaded=count, file=filename)
 
 
 @urls_bp.route('/urls/<short_code>')

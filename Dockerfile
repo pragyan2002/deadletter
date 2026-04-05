@@ -9,4 +9,4 @@ COPY . .
 
 EXPOSE 5000
 
-CMD ["uv", "run", "run.py"]
+CMD ["sh", "-c", "uv run migrate.py && uv run run.py"]

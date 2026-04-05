@@ -1,3 +1,6 @@
+import csv
+import os
+
 import peewee
 from flask import Blueprint, abort, jsonify, request
 
@@ -6,6 +9,21 @@ from app.models.user import User
 from app.validators import validate_user_create
 
 users_bp = Blueprint('users', __name__)
+
+SEED_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), '..', '..', 'seed'))
+
+
+@users_bp.route('/users', methods=['GET'])
+def list_users():
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 20, type=int)
+    query = User.select().order_by(User.id)
+    users = query.paginate(page, per_page)
+    return jsonify([
+        {'id': u.id, 'username': u.username, 'email': u.email,
+         'created_at': u.created_at.isoformat()}
+        for u in users
+    ])
 
 
 @users_bp.route('/users', methods=['POST'])
@@ -24,6 +42,38 @@ def create_user():
         abort(409, description='username or email already exists')
     return jsonify(id=user.id, username=user.username, email=user.email,
                    created_at=user.created_at.isoformat()), 201
+
+
+@users_bp.route('/users/bulk', methods=['POST'])
+def bulk_load_users():
+    data = request.get_json(silent=True) or {}
+    filename = data.get('file')
+    if not filename:
+        abort(400, description='file is required')
+    if not filename.endswith('.csv'):
+        abort(400, description='file must be a .csv')
+
+    path = os.path.normpath(os.path.join(SEED_DIR, filename))
+    if not path.startswith(SEED_DIR):
+        abort(400, description='invalid file path')
+    if not os.path.exists(path):
+        abort(400, description=f'{filename} not found')
+
+    from datetime import datetime
+    count = 0
+    with open(path, newline='', encoding='utf-8') as f:
+        for row in csv.DictReader(f):
+            User.get_or_create(
+                id=int(row['id']),
+                defaults={
+                    'username': row['username'],
+                    'email': row['email'],
+                    'created_at': datetime.fromisoformat(row['created_at']),
+                },
+            )
+            count += 1
+
+    return jsonify(loaded=count, file=filename)
 
 
 @users_bp.route('/users/<int:user_id>')
@@ -50,3 +100,38 @@ def get_user(user_id):
         created_at=user.created_at.isoformat(),
         urls=urls,
     )
+
+
+@users_bp.route('/users/<int:user_id>', methods=['PUT'])
+def update_user(user_id):
+    user = User.get_or_none(User.id == user_id)
+    if user is None:
+        abort(404, description=f'user {user_id} not found')
+
+    data = request.get_json(silent=True) or {}
+    if not data.get('username') and not data.get('email'):
+        abort(400, description='at least one of username or email is required')
+
+    if 'username' in data:
+        user.username = data['username'].strip()
+    if 'email' in data:
+        user.email = data['email'].strip()
+
+    try:
+        user.save()
+    except peewee.IntegrityError:
+        abort(409, description='username or email already exists')
+
+    return jsonify(id=user.id, username=user.username, email=user.email,
+                   created_at=user.created_at.isoformat())
+
+
+@users_bp.route('/users/<int:user_id>', methods=['DELETE'])
+def delete_user(user_id):
+    user = User.get_or_none(User.id == user_id)
+    if user is None:
+        abort(404, description=f'user {user_id} not found')
+
+    result = {'id': user.id, 'username': user.username, 'email': user.email}
+    user.delete_instance()
+    return jsonify(result)
