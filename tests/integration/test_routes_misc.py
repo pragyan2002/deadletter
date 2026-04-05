@@ -1,4 +1,5 @@
 from app.models.url import Url
+import io
 
 
 def _create_url(client, user_id, url='https://example.com', title='Test'):
@@ -52,6 +53,93 @@ class TestUsersRoutes:
             'detail': 'username or email already exists',
         }
         assert set(dup_email.get_json().keys()) == {'error', 'detail'}
+
+    def test_list_users_pagination(self, client):
+        for i in range(3):
+            created = client.post(
+                '/users',
+                json={'username': f'page_user_{i}', 'email': f'page_user_{i}@example.com'},
+            )
+            assert created.status_code == 201
+
+        page_1 = client.get('/users?page=1&per_page=2')
+        assert page_1.status_code == 200
+        assert len(page_1.get_json()) == 2
+
+        page_2 = client.get('/users?page=2&per_page=2')
+        assert page_2.status_code == 200
+        assert len(page_2.get_json()) == 1
+
+    def test_bulk_load_users_validation(self, client):
+        missing_file = client.post('/users/bulk', json={})
+        assert missing_file.status_code == 400
+        assert missing_file.get_json()['error'] == 'bad_request'
+
+        wrong_ext = client.post('/users/bulk', json={'file': 'users.txt'})
+        assert wrong_ext.status_code == 400
+        assert wrong_ext.get_json()['error'] == 'bad_request'
+
+    def test_bulk_load_users_with_upload_parses_created_at_resiliently(self, client):
+        csv_body = '\n'.join(
+            [
+                'id,username,email,created_at',
+                '1,upload_user_1,upload_user_1@example.com,2026-01-01T00:00:00Z',
+                '2,upload_user_2,upload_user_2@example.com,not-a-timestamp',
+                '3,,,2026-01-02T00:00:00Z',
+            ]
+        )
+        resp = client.post(
+            '/users/bulk',
+            data={'file': (io.BytesIO(csv_body.encode('utf-8')), 'users.csv')},
+            content_type='multipart/form-data',
+        )
+        assert resp.status_code == 200
+        assert resp.get_json() == {'loaded': 2, 'file': 'users.csv'}
+
+        fetched = client.get('/users')
+        users = fetched.get_json()
+        assert len(users) == 2
+        assert users[0]['username'] == 'upload_user_1'
+        assert users[1]['username'] == 'upload_user_2'
+
+    def test_bulk_load_users_row_count_fallback_and_missing_file(self, client):
+        generated = client.post('/users/bulk', json={'file': 'users.csv', 'row_count': 3})
+        assert generated.status_code == 200
+        assert generated.get_json() == {'loaded': 3, 'file': 'users.csv'}
+
+        listed = client.get('/users')
+        assert listed.status_code == 200
+        usernames = [u['username'] for u in listed.get_json()]
+        assert usernames == ['bulk_user_0001', 'bulk_user_0002', 'bulk_user_0003']
+
+        missing = client.post('/users/bulk', json={'file': 'does-not-exist.csv', 'row_count': 'x'})
+        assert missing.status_code == 400
+        assert missing.get_json()['error'] == 'bad_request'
+
+    def test_update_and_delete_user_paths(self, client):
+        created = client.post('/users', json={'username': 'upd', 'email': 'upd@example.com'})
+        assert created.status_code == 201
+        user_id = created.get_json()['id']
+
+        no_fields = client.put(f'/users/{user_id}', json={})
+        assert no_fields.status_code == 400
+
+        updated = client.put(f'/users/{user_id}', json={'email': 'upd2@example.com'})
+        assert updated.status_code == 200
+        assert updated.get_json()['email'] == 'upd2@example.com'
+
+        conflict_base = client.post('/users', json={'username': 'conflict_u', 'email': 'conflict_u@example.com'})
+        assert conflict_base.status_code == 201
+        conflict = client.put(f'/users/{user_id}', json={'username': 'conflict_u'})
+        assert conflict.status_code == 409
+        assert conflict.get_json()['error'] == 'conflict'
+
+        deleted = client.delete(f'/users/{user_id}')
+        assert deleted.status_code == 200
+        assert deleted.get_json()['id'] == user_id
+
+        delete_missing = client.delete('/users/99999')
+        assert delete_missing.status_code == 404
 
 
 class TestEventsRoutes:
