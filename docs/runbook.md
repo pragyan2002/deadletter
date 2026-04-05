@@ -9,6 +9,14 @@ python cli.py health
 python cli.py metrics
 ```
 
+## API process model and restarts
+
+- Each `api` container runs one Gunicorn master process plus multiple workers.
+- Worker default is `2 * CPU + 1` unless `WEB_CONCURRENCY` is set.
+- Gunicorn will restart crashed workers automatically.
+- Docker (`restart: always`) restarts the whole container only when the Gunicorn master exits.
+- Compose marks `api` healthy only after `/health` succeeds.
+
 ## Restart the API
 
 ```bash
@@ -83,7 +91,8 @@ python cli.py dashboard
 # Terminal 2: kill the api container
 docker kill deadletter-api-1
 
-# Container restarts automatically in ~5 seconds (restart: always)
+# Container restarts automatically due to `restart: always` if the Gunicorn master exits
+# If only a worker exits, Gunicorn replaces it without a container restart
 # Dashboard recovers on next refresh
 ```
 

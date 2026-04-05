@@ -44,9 +44,17 @@ docker compose logs -f
 
 The app is live at `http://<DROPLET_IP>:5000`.
 
+The API container starts as a Gunicorn master process with multiple worker processes:
+
+- Default worker count is `2 * CPU + 1` (override with `WEB_CONCURRENCY`)
+- Default timeouts: `GUNICORN_TIMEOUT=60`, `GUNICORN_GRACEFUL_TIMEOUT=30`, `GUNICORN_KEEPALIVE=5`
+- `restart: always` restarts the container if the Gunicorn master exits
+- Gunicorn itself supervises and replaces crashed workers without restarting the container
+
 Test it:
 ```bash
 curl http://<DROPLET_IP>:5000/health
+docker compose ps api  # should show healthy once /health checks pass
 ```
 
 ## Step 5: Load seed data
