@@ -76,6 +76,7 @@ def create_event():
     if not isinstance(event_type, str) or not event_type.strip():
         abort(400, description='event_type is required')
     event_type = event_type.strip()
+    # Keep POST /events aligned with canonical validator enum, including redirected.
     event_errors = validate_event_type(event_type)
     if event_errors:
         abort(400, description=event_errors[0])
