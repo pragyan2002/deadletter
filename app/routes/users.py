@@ -1,3 +1,4 @@
+import peewee
 from flask import Blueprint, abort, jsonify, request
 
 from app.models.url import Url
@@ -14,10 +15,13 @@ def create_user():
     if errors:
         abort(400, description=errors[0])
 
-    user = User.create(
-        username=data['username'].strip(),
-        email=data['email'].strip(),
-    )
+    try:
+        user = User.create(
+            username=data['username'].strip(),
+            email=data['email'].strip(),
+        )
+    except peewee.IntegrityError:
+        abort(409, description='username or email already exists')
     return jsonify(id=user.id, username=user.username, email=user.email,
                    created_at=user.created_at.isoformat()), 201
 

@@ -29,6 +29,30 @@ class TestUsersRoutes:
         missing_resp = client.get('/users/99999')
         assert missing_resp.status_code == 404
 
+    def test_create_user_duplicate_username_returns_409_json(self, client):
+        first = client.post('/users', json={'username': 'alice', 'email': 'alice@example.com'})
+        assert first.status_code == 201
+
+        dup_username = client.post('/users', json={'username': 'alice', 'email': 'alice2@example.com'})
+        assert dup_username.status_code == 409
+        assert dup_username.get_json() == {
+            'error': 'conflict',
+            'detail': 'username or email already exists',
+        }
+        assert set(dup_username.get_json().keys()) == {'error', 'detail'}
+
+    def test_create_user_duplicate_email_returns_409_json(self, client):
+        first = client.post('/users', json={'username': 'bob', 'email': 'bob@example.com'})
+        assert first.status_code == 201
+
+        dup_email = client.post('/users', json={'username': 'bobby', 'email': 'bob@example.com'})
+        assert dup_email.status_code == 409
+        assert dup_email.get_json() == {
+            'error': 'conflict',
+            'detail': 'username or email already exists',
+        }
+        assert set(dup_email.get_json().keys()) == {'error', 'detail'}
+
 
 class TestEventsRoutes:
     def test_list_events_with_filters(self, client, user):
